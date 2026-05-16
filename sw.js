@@ -1,4 +1,4 @@
-const CACHE = 'qingdu-v2';
+const CACHE = 'qingdu-v3';
 const ASSETS = [
   '.',
   'index.html',
