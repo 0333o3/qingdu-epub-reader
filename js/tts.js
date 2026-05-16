@@ -234,22 +234,25 @@ function navigateToHighlight(el) {
   var scroller = document.getElementById('epub-scroller');
   if (!scroller || typeof pageWidth === 'undefined' || !pageWidth) return;
 
-  // Find which page contains this element
-  var page = el.closest('.epub-page');
+  // Walk up DOM tree to find the page container
+  var page = el;
+  while (page && !page.classList.contains('epub-page')) {
+    page = page.parentElement;
+  }
   if (!page) return;
 
-  // Get all pages and find the index
+  // Find page index
   var pages = scroller.querySelectorAll('.epub-page');
   var targetPage = 0;
   for (var i = 0; i < pages.length; i++) {
     if (pages[i] === page) { targetPage = i; break; }
   }
 
-  // Scroll to the target page
+  // Scroll if needed
   if (targetPage !== currentPage) {
     currentPage = targetPage;
     scroller.scrollTo({ left: targetPage * pageWidth, behavior: 'smooth' });
-    updatePageCount();
+    if (typeof updatePageCount === 'function') updatePageCount();
   }
 }
 
