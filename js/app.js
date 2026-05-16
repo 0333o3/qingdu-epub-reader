@@ -40,70 +40,22 @@ async function processEpubFile(file) {
 }
 
 async function tryUpdateMetadata(id, arrayBuffer) {
-  if (typeof ePub === 'undefined') return;
-
-  let book = null;
-  let url = null;
-
   try {
-    const blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
-    url = URL.createObjectURL(blob);
-    book = ePub(url);
-
-    // Wait for ready with timeout
-    await Promise.race([
-      book.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000))
-    ]);
-
-    const updates = {};
-
-    // Metadata
-    try {
-      let meta = book.loaded ? book.loaded.metadata : null;
-      if (meta && typeof meta.then === 'function') meta = await meta;
-      if (meta) {
-        if (meta.title && typeof meta.title === 'string') updates.title = meta.title;
-        if (meta.creator) {
-          updates.author = typeof meta.creator === 'string'
-            ? meta.creator
-            : (meta.creator[0]?.name || meta.creator[0] || 'Unknown');
-        }
-      }
-    } catch {}
-
-    // Cover
-    try {
-      if (typeof book.coverUrl === 'function') {
-        const coverUrl = await Promise.race([
-          book.coverUrl(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000))
-        ]);
-        if (coverUrl) {
-          const resp = await fetch(coverUrl);
-          const coverBlob = await resp.blob();
-          updates.cover = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(coverBlob);
-          });
-        }
-      }
-    } catch {}
+    var epub = await parseEpub(arrayBuffer);
+    var updates = {};
+    if (epub.title) updates.title = epub.title;
+    if (epub.creator) updates.author = epub.creator;
 
     if (Object.keys(updates).length > 0) {
-      const current = await getBook(id);
+      var current = await getBook(id);
       if (current) {
         Object.assign(current, updates);
         await saveBook(current);
+        refreshLibrary();
       }
     }
-  } catch {
-    // Best effort - book already saved with filename
-  } finally {
-    if (book) try { book.destroy(); } catch {}
-    if (url) URL.revokeObjectURL(url);
+  } catch (e) {
+    // Best effort
   }
 }
 
@@ -189,8 +141,8 @@ document.getElementById('file-upload').addEventListener('change', async (e) => {
   const files = e.target.files;
   if (!files || files.length === 0) return;
 
-  if (typeof ePub === 'undefined') {
-    showToast('epub.js 未加载，请检查网络后刷新页面');
+  if (typeof JSZip === 'undefined') {
+    showToast('组件未加载，请检查网络后刷新页面');
     return;
   }
 
