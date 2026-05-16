@@ -43,11 +43,12 @@ function parseEpub(arrayBuffer) {
           }
         }
 
-        // Parse TOC from NCX file
+        // Parse TOC from NCX file (must complete before returning)
         epub.toc = [];
         var ncxFile = z.file(epub._basePath + 'toc.ncx');
+        var tocPromise = Promise.resolve();
         if (ncxFile) {
-          ncxFile.async('string').then(function(ncx) {
+          tocPromise = ncxFile.async('string').then(function(ncx) {
             var re = /<navPoint[^>]*>[\s\S]*?<navLabel>[\s\S]*?<text>([\s\S]*?)<\/text>[\s\S]*?<\/navLabel>[\s\S]*?<content[^>]*src="([^"]*)"[^>]*\/>[\s\S]*?<\/navPoint>/gi;
             var m;
             while ((m = re.exec(ncx))) {
@@ -55,8 +56,7 @@ function parseEpub(arrayBuffer) {
             }
           }).catch(function() {});
         }
-
-        return epub;
+        return tocPromise.then(function() { return epub; });
       });
     });
   });

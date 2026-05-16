@@ -285,6 +285,65 @@ body {
 /* epub.js content styling injected via JS */
 .epub-container { padding: 16px 20px !important; }
 
+/* ===== TOC Panel ===== */
+.toc-panel {
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  width: 280px;
+  max-width: 82vw;
+  background: #fff;
+  z-index: 50;
+  box-shadow: 2px 0 20px rgba(0,0,0,0.15);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.25s ease;
+}
+.toc-panel.hidden { transform: translateX(-100%); }
+.toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  font-size: 17px;
+  font-weight: 600;
+  border-bottom: 1px solid #f0f0f0;
+}
+.toc-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 0;
+}
+.toc-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 13px 20px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  color: #1a1a1a;
+  font-family: var(--font);
+  border-left: 3px solid transparent;
+}
+.toc-item:active { background: #f3f4f6; }
+.toc-item.current {
+  border-left-color: #4f46e5;
+  font-weight: 600;
+  color: #4f46e5;
+  background: #eef2ff;
+}
+.toc-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #d1d5db;
+  flex-shrink: 0;
+}
+.toc-item.current .toc-dot { background: #4f46e5; }
+
 /* ===== TTS Controls ===== */
 .tts-controls {
   position: fixed;

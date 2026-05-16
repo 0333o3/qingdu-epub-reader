@@ -159,28 +159,64 @@ openReader = function(bookId) {
 function jumpChapter(forward) {
   var map = window._epubTocMap || [];
   if (map.length < 2) return;
-
-  // Find current chapter based on current page
-  var currentChapter = -1;
+  var cur = -1;
   for (var i = map.length - 1; i >= 0; i--) {
-    if (currentPage >= map[i].page) {
-      currentChapter = i;
-      break;
-    }
+    if (currentPage >= map[i].page) { cur = i; break; }
   }
+  var tgt = forward ? cur + 1 : cur - 1;
+  if (tgt < 0 || tgt >= map.length) return;
+  jumpToPage(map[tgt].page);
+}
 
-  var target = forward ? currentChapter + 1 : currentChapter - 1;
-  if (target < 0 || target >= map.length) return;
-
+function jumpToPage(pg) {
   var scroller = document.getElementById('epub-scroller');
-  if (scroller && pageWidth) {
-    currentPage = map[target].page;
-    scroller.scrollTo({ left: currentPage * pageWidth, behavior: 'smooth' });
+  if (scroller && typeof pageWidth !== 'undefined' && pageWidth > 0) {
+    currentPage = pg;
+    scroller.scrollTo({ left: pg * pageWidth, behavior: 'smooth' });
     updateProgress();
     scheduleSave();
   }
 }
 
+// ===== TOC Sidebar =====
+function toggleToc() {
+  var panel = document.getElementById('toc-panel');
+  if (panel.classList.contains('hidden')) {
+    buildTocContent();
+    panel.classList.remove('hidden');
+  } else {
+    panel.classList.add('hidden');
+  }
+}
+
+function buildTocContent() {
+  var list = document.getElementById('toc-list');
+  var map = window._epubTocMap || [];
+  if (map.length === 0) {
+    list.innerHTML = '<div style="padding:24px;color:#9ca3af;font-size:13px;text-align:center;">暂无目录</div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < map.length; i++) {
+    var cls = (currentPage >= map[i].page) ? ' toc-item current' : 'toc-item';
+    html += '<button class="' + cls + '" data-page="' + map[i].page + '">' +
+      '<span class="toc-dot"></span>' + map[i].label + '</button>';
+  }
+  list.innerHTML = html;
+
+  list.querySelectorAll('.toc-item').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var pg = parseInt(btn.getAttribute('data-page'));
+      jumpToPage(pg);
+      document.getElementById('toc-panel').classList.add('hidden');
+    });
+  });
+}
+
+document.getElementById('btn-toc').addEventListener('click', toggleToc);
+document.getElementById('btn-toc-close').addEventListener('click', function() {
+  document.getElementById('toc-panel').classList.add('hidden');
+});
 document.getElementById('btn-prev-chapter').addEventListener('click', function() { jumpChapter(false); });
 document.getElementById('btn-next-chapter').addEventListener('click', function() { jumpChapter(true); });
 document.getElementById('btn-font-up').addEventListener('click', function() { changeFontSize(2); });
