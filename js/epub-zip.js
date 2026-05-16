@@ -201,37 +201,41 @@ function renderEpubTo(epub, container) {
       container.innerHTML = '';
       container.appendChild(scroller);
 
-      // Build TOC → page mapping
+      // Build TOC → page mapping by searching for chapter titles in page text
       var tocMap = [];
       if (epub.toc && epub.toc.length > 0) {
         var pageEls = scroller.querySelectorAll('.epub-page');
-        for (var pi = 0; pi < pageEls.length; pi++) {
-          var markers = pageEls[pi].querySelectorAll('.epub-file-marker');
-          for (var mi = 0; mi < markers.length; mi++) {
-            var f = markers[mi].getAttribute('data-file');
-            for (var ti = 0; ti < epub.toc.length; ti++) {
-              // Compare normalized paths (handle encoding differences)
-              if (normalizePath(epub.toc[ti].href) === normalizePath(f)) {
-                tocMap.push({ label: epub.toc[ti].label, page: pi });
+        for (var ti = 0; ti < epub.toc.length; ti++) {
+          var label = epub.toc[ti].label;
+          // Skip empty, cover, and title-page TOC entries (they match too broadly)
+          var skipWords = ['cover', 'title page', 'titlepage', 'copyright'];
+          var labelLow = label.toLowerCase();
+          if (skipWords.indexOf(labelLow) >= 0) continue;
+
+          // Try exact label match first
+          var found = false;
+          for (var pi = 0; pi < pageEls.length; pi++) {
+            if (pageEls[pi].textContent.indexOf(label) >= 0) {
+              tocMap.push({ label: label, page: pi });
+              found = true;
+              break;
+            }
+          }
+          // If not found by label, try first 5 meaningful chars
+          if (!found) {
+            var short = label.replace(/[^a-zA-Z0-9一-鿿]/g, '').substring(0, 5);
+            if (short.length >= 3) {
+              for (var pi2 = 0; pi2 < pageEls.length; pi2++) {
+                if (pageEls[pi2].textContent.indexOf(short) >= 0) {
+                  tocMap.push({ label: label, page: pi2 });
+                  break;
+                }
               }
             }
           }
         }
-      }
-      // If matching by file failed, try matching by label text in pages
-      if (tocMap.length === 0 && epub.toc && epub.toc.length > 0) {
-        var doneLabels = {};
-        for (var ti2 = 0; ti2 < epub.toc.length; ti2++) {
-          var searchLabel = epub.toc[ti2].label;
-          if (doneLabels[searchLabel]) continue;
-          doneLabels[searchLabel] = true;
-          for (var pi2 = 0; pi2 < pageEls.length; pi2++) {
-            if (pageEls[pi2].textContent.indexOf(searchLabel) >= 0) {
-              tocMap.push({ label: searchLabel, page: pi2 });
-              break;
-            }
-          }
-        }
+        // Sort by page number
+        tocMap.sort(function(a, b) { return a.page - b.page; });
       }
       window._epubTocMap = tocMap;
 
