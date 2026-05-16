@@ -387,16 +387,28 @@ function setupWordTapOnDiv(el) {
       clearTimeout(longPressTimer);
       longPressTimer = setTimeout(function() {
         if (!moved) {
-          var el2 = document.elementFromPoint(sx, sy);
-          var p = null;
-          // Walk up DOM to find a paragraph or content block
-          var cur = el2;
-          while (cur && cur !== document.body && cur !== el) {
-            if (cur.tagName === 'P') { p = cur; break; }
-            cur = cur.parentElement;
+          // Use caretRangeFromPoint to find the text node, then walk up to paragraph
+          var range;
+          if (document.caretRangeFromPoint) {
+            range = document.caretRangeFromPoint(sx, sy);
+          } else if (document.caretPositionFromPoint) {
+            var pos = document.caretPositionFromPoint(sx, sy);
+            if (pos) { range = document.createRange(); range.setStart(pos.offsetNode, pos.offset); }
           }
-          if (p && p.textContent.trim().length > 10) {
-            startTTSFromParagraph(p.textContent.trim(), p);
+          if (range && range.startContainer) {
+            var node = range.startContainer;
+            // Walk up from text node to find parent <p> or content block
+            var cur = node.nodeType === 3 ? node.parentElement : node;
+            while (cur && cur !== el && cur.tagName !== 'BODY' && cur.tagName !== 'HTML') {
+              if (cur.tagName === 'P' || cur.classList.contains('calibre2') || cur.classList.contains('calibre1')) {
+                var txt = cur.textContent.trim();
+                if (txt.length > 10) {
+                  startTTSFromParagraph(txt, cur);
+                }
+                return;
+              }
+              cur = cur.parentElement;
+            }
           }
         }
       }, 600);
