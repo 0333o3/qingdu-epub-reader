@@ -246,17 +246,22 @@ body {
   overflow: hidden;
   position: relative;
   background: var(--surface);
-  touch-action: pan-y;
 }
-#epub-page-container {
-  width: 100%;
+#epub-scroller {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
   height: 100%;
+  width: 100%;
 }
-#epub-columns {
-  -webkit-user-select: none;
-  user-select: none;
+.epub-page {
+  scroll-snap-align: start;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
-#epub-columns * {
+.epub-page * {
   max-width: 100% !important;
 }
 
