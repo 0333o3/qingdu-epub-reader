@@ -99,37 +99,39 @@ function startTTSFromParagraph(paraText, paraEl) {
     return;
   }
 
-  // Build full text from all text nodes
+  // Find paragraph position by walking text nodes and checking DOM containment
   var body = getEpubBody();
-  var allNodes = [];
+  var charCount = 0;
+  var paraStartIdx = -1;
   var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
   var node;
+
   while ((node = walker.nextNode())) {
-    var t = node.textContent;
-    if (t.trim()) allNodes.push(t);
-  }
-  var fullText = allNodes.join(' ');
-
-  // Try progressively shorter search strings
-  var search = paraText.replace(/\s+/g, ' ').substring(0, 60).trim();
-  var pos = fullText.indexOf(search);
-  if (pos < 0) {
-    search = paraText.replace(/\s+/g, ' ').substring(0, 30).trim();
-    pos = fullText.indexOf(search);
-  }
-  if (pos < 0) {
-    // Last resort: find by unique words
-    var words = paraText.replace(/[^a-zA-Z]/g, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 5);
-    if (words.length >= 3) {
-      var phrase = words.join(' ');
-      pos = fullText.indexOf(phrase);
+    var isInsidePara = false;
+    var cur = node.parentElement;
+    while (cur && cur !== body) {
+      if (cur === paraEl) { isInsidePara = true; break; }
+      cur = cur.parentElement;
     }
+    if (isInsidePara && paraStartIdx < 0) {
+      paraStartIdx = charCount;
+      break;
+    }
+    charCount += node.textContent.length;
   }
 
-  if (pos >= 0) {
-    var before = fullText.substring(0, pos);
-    var sents = before.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
-    ttsState.currentSentence = Math.max(0, sents.length - 1);
+  // If not found by DOM, try exact text match as fallback
+  if (paraStartIdx < 0) {
+    var bodyText = body.textContent;
+    var cleanPara = paraText.replace(/\s+/g, ' ').substring(0, 40).trim();
+    paraStartIdx = bodyText.indexOf(cleanPara);
+  }
+
+  if (paraStartIdx >= 0) {
+    // Count sentences in text before this position
+    var beforeText = body.textContent.substring(0, paraStartIdx);
+    var sents = beforeText.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
+    ttsState.currentSentence = Math.max(0, sents.length);
   } else {
     ttsState.currentSentence = 0;
   }
