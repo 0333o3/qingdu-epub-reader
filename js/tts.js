@@ -92,6 +92,28 @@ function startTTS(startIdx) {
   speakCurrent();
 }
 
+function startTTSFromParagraph(paraText, paraEl) {
+  ttsState.sentences = extractSentences();
+  if (ttsState.sentences.length === 0) {
+    showToast('没有可朗读的文本');
+    return;
+  }
+  var paraStart = paraText.substring(0, 40).replace(/[^a-zA-Z0-9]/g, ' ').trim();
+  var bestIdx = 0;
+  for (var i = 0; i < ttsState.sentences.length; i++) {
+    var sStart = ttsState.sentences[i].substring(0, 40).replace(/[^a-zA-Z0-9]/g, ' ').trim();
+    if (sStart.indexOf(paraStart) === 0 || paraStart.indexOf(sStart) === 0) {
+      bestIdx = i; break;
+    }
+  }
+  ttsState.currentSentence = bestIdx;
+  ttsState.playing = true;
+  ttsState.paused = false;
+  updateTTSButton();
+  showToast('从选中段落开始朗读');
+  speakCurrent();
+}
+
 function speakCurrent() {
   if (!ttsState.playing || ttsState.paused) return;
   if (ttsState.currentSentence >= ttsState.sentences.length) {
