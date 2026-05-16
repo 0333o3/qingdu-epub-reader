@@ -18,26 +18,48 @@ function generateId() {
 async function processEpubFile(file) {
   const arrayBuffer = await file.arrayBuffer();
 
-  const blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
-  const url = URL.createObjectURL(blob);
-  const epub = ePub(url);
-
   let title = file.name.replace(/\.epub$/i, '');
   let author = 'Unknown';
   let coverBase64 = null;
 
+  // Try to extract metadata with a timeout (don't block saving)
   try {
-    await epub.ready;
+    const blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
+    const url = URL.createObjectURL(blob);
+    const book = ePub(url);
+
+    const timedReady = Promise.race([
+      book.ready,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+    ]);
+
+    await timedReady;
+
+    // Get metadata - loaded.metadata may be direct or a promise
     try {
-      const metadata = await epub.loaded.metadata;
+      let metadata = book.loaded ? book.loaded.metadata : null;
+      if (metadata && typeof metadata.then === 'function') {
+        metadata = await metadata;
+      }
       if (metadata) {
-        if (metadata.title) title = metadata.title;
-        if (metadata.creator) author = metadata.creator;
+        if (metadata.title && typeof metadata.title === 'string') title = metadata.title;
+        if (metadata.creator) {
+          author = typeof metadata.creator === 'string'
+            ? metadata.creator
+            : (metadata.creator[0]?.name || metadata.creator[0] || 'Unknown');
+        }
       }
     } catch {}
 
+    // Get cover
     try {
-      const coverUrl = await epub.coverUrl();
+      let coverUrl = null;
+      if (typeof book.coverUrl === 'function') {
+        coverUrl = await Promise.race([
+          book.coverUrl(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+        ]);
+      }
       if (coverUrl) {
         const resp = await fetch(coverUrl);
         const coverBlob = await resp.blob();
@@ -49,12 +71,14 @@ async function processEpubFile(file) {
         });
       }
     } catch {}
-  } catch {}
 
-  epub.destroy();
-  URL.revokeObjectURL(url);
+    try { book.destroy(); } catch {}
+    URL.revokeObjectURL(url);
+  } catch {
+    // Metadata extraction failed, save with filename as title
+  }
 
-  const book = {
+  const bookData = {
     id: generateId(),
     title,
     author,
@@ -64,8 +88,8 @@ async function processEpubFile(file) {
     addedAt: Date.now()
   };
 
-  await saveBook(book);
-  return book;
+  await saveBook(bookData);
+  return bookData;
 }
 
 async function refreshLibrary() {
@@ -150,15 +174,22 @@ document.getElementById('file-upload').addEventListener('change', async (e) => {
   const files = e.target.files;
   if (!files || files.length === 0) return;
 
+  if (typeof ePub === 'undefined') {
+    showToast('epub.js 未加载，请检查网络后刷新页面');
+    return;
+  }
+
   for (const file of files) {
     if (!file.name.toLowerCase().endsWith('.epub')) {
       showToast('仅支持 EPUB 格式');
       continue;
     }
+    showToast('处理中...');
     try {
       await processEpubFile(file);
       showToast('添加成功');
     } catch (err) {
+      console.error('Process error:', err);
       showToast('添加失败: ' + file.name);
     }
   }
