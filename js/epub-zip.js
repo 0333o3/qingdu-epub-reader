@@ -127,23 +127,39 @@ function renderEpubTo(epub, container) {
         return html;
       }).join('\n<hr style="border:none;margin:20px 0;"/>');
 
-      // Render in a div directly (not iframe)
-      var wrapper = document.createElement('div');
-      wrapper.id = 'epub-content';
-      wrapper.style.cssText = 'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;font-size:18px;line-height:1.8;padding:16px 20px 40px;color:#1a1a1a !important;background:#fff;word-wrap:break-word;overflow-wrap:break-word;';
+      // Render in a paginated layout using CSS columns
+      var pageContainer = document.createElement('div');
+      pageContainer.id = 'epub-page-container';
+      pageContainer.style.cssText = 'overflow:hidden;height:100%;position:relative;background:#fff;';
+
+      var pageWidth = container.clientWidth || window.innerWidth;
+      var pageHeight = container.clientHeight || (window.innerHeight - 100);
+
+      var columns = document.createElement('div');
+      columns.id = 'epub-columns';
+      columns.style.cssText = 'column-width:' + pageWidth + 'px;' +
+        'column-gap:0;' +
+        'height:' + pageHeight + 'px;' +
+        'column-fill:auto;' +
+        'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;' +
+        'font-size:18px;line-height:1.8;padding:0;' +
+        'color:#1a1a1a !important;background:#fff;' +
+        'word-wrap:break-word;overflow-wrap:break-word;' +
+        'transition:transform 0.3s ease;' +
+        'will-change:transform;';
 
       // Wrap in a style tag to override any EPUB CSS
-      fullHtml = '<style>body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;text-align:left !important;}p{text-indent:2em !important;margin-bottom:0.6em !important;}img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}</style>' + fullHtml;
+      fullHtml = '<style>body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;text-align:left !important;}p{text-indent:2em !important;margin-bottom:0.6em !important;}img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}body{padding:16px 20px 40px !important;}</style>' + fullHtml;
 
-      wrapper.innerHTML = fullHtml;
-
+      columns.innerHTML = fullHtml;
+      pageContainer.appendChild(columns);
       container.innerHTML = '';
-      container.appendChild(wrapper);
+      container.appendChild(pageContainer);
 
-      // Setup word-tap on the wrapper
-      setupWordTapOnDiv(wrapper);
+      // Setup word-tap on the columns div
+      setupWordTapOnDiv(columns);
 
-      return wrapper;
+      return { container: pageContainer, columns: columns, pageWidth: pageWidth };
     });
   });
 }
