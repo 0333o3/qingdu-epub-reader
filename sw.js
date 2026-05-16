@@ -1,4 +1,4 @@
-const CACHE = 'qingdu-v1';
+const CACHE = 'qingdu-v2';
 const ASSETS = [
   '.',
   'index.html',
@@ -31,6 +31,22 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   if (e.request.url.includes('api.dictionaryapi.dev')) return;
+
+  // Network-first for local assets (always fetch updates)
+  if (e.request.url.includes(location.hostname) || e.request.url.startsWith('.')) {
+    e.respondWith(
+      fetch(e.request).then(resp => {
+        if (resp.ok) {
+          const clone = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return resp;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Cache-first for CDN (epub.js)
   e.respondWith(
     caches.match(e.request).then(cached =>
       cached || fetch(e.request).then(resp => {
