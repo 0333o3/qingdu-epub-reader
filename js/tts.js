@@ -69,9 +69,20 @@ function extractSentences() {
   var textParts = [];
   var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
   var node;
+  var lastBlock = null;
   while ((node = walker.nextNode())) {
     var t = node.textContent.trim();
-    if (t) textParts.push(t);
+    if (!t) continue;
+    // Add newline between different block-level parents to separate titles from body
+    var block = node.parentElement;
+    while (block && block !== body && !/^(P|H[1-6]|DIV|LI|BLOCKQUOTE)$/i.test(block.tagName)) {
+      block = block.parentElement;
+    }
+    if (lastBlock && block && block !== lastBlock) {
+      textParts.push('\n');
+    }
+    textParts.push(t);
+    lastBlock = block;
   }
 
   var fullText = textParts.join(' ');
@@ -96,33 +107,43 @@ function startTTSFromParagraph(paraText, paraEl) {
   // Build the SAME text that extractSentences uses
   var body = getEpubBody();
   var textParts = [];
-  var charCounts = [0];  // cumulative char count after each part
+  var charCounts = [0];
   var total = 0;
-  var nodeTextMap = [];  // track which nodes belong to which text part
-
   var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
   var node;
   var paraStartIdx = -1;
+  var lastBlock2 = null;
 
   while ((node = walker.nextNode())) {
     var txt = node.textContent;
     var trimmed = txt.trim();
-    if (trimmed) {
-      textParts.push(trimmed);
-      total += trimmed.length + 1;  // +1 for the join space
-      charCounts.push(total);
+    if (!trimmed) continue;
 
-      // Check if this node is inside the paragraph
-      if (paraStartIdx < 0) {
-        var cur = node.parentElement;
-        while (cur && cur !== body) {
-          if (cur === paraEl) {
-            // paraStartIdx = total chars before this text part
-            paraStartIdx = charCounts[charCounts.length - 2];
-            break;
-          }
-          cur = cur.parentElement;
+    // Newline between different block parents (same logic as extractSentences)
+    var block = node.parentElement;
+    while (block && block !== body && !/^(P|H[1-6]|DIV|LI|BLOCKQUOTE)$/i.test(block.tagName)) {
+      block = block.parentElement;
+    }
+    if (lastBlock2 && block && block !== lastBlock2) {
+      textParts.push('\n');
+      total += 2;
+      charCounts.push(total);
+    }
+    lastBlock2 = block;
+
+    textParts.push(trimmed);
+    total += trimmed.length + 1;
+    charCounts.push(total);
+
+    // Check if this node is inside the paragraph
+    if (paraStartIdx < 0) {
+      var cur = node.parentElement;
+      while (cur && cur !== body) {
+        if (cur === paraEl) {
+          paraStartIdx = charCounts[charCounts.length - 2];
+          break;
         }
+        cur = cur.parentElement;
       }
     }
   }
@@ -238,24 +259,47 @@ function highlightSentence(text) {
   var body = getEpubBody();
   if (!body) return;
 
-  var prefix = text.substring(0, 30);
+  // Try to find the sentence text in text nodes
+  var prefix = text.substring(0, 20).replace(/\s+/g, ' ').trim();
+  if (prefix.length < 3) return;
+
   var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
   var node;
   while ((node = walker.nextNode())) {
-    if (node.textContent.indexOf(prefix) >= 0) {
+    var idx = node.textContent.indexOf(prefix);
+    if (idx >= 0) {
       var range = document.createRange();
-      var idx = node.textContent.indexOf(prefix);
+      // Only highlight what fits in this text node
+      var endIdx = Math.min(idx + text.length, node.textContent.length);
       range.setStart(node, idx);
-      range.setEnd(node, Math.min(idx + text.length, node.textContent.length));
+      range.setEnd(node, endIdx);
       var span = document.createElement('span');
       span.className = 'tts-highlight';
       span.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
       try {
         range.surroundContents(span);
-        // Navigate to the page containing this highlight
         navigateToHighlight(span);
       } catch(e) {}
       break;
+    }
+  }
+
+  // Also search for shorter prefix if not found
+  if (!body.querySelector('.tts-highlight')) {
+    var short = prefix.substring(0, 10);
+    var w2 = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+    while ((node = w2.nextNode())) {
+      var i2 = node.textContent.indexOf(short);
+      if (i2 >= 0) {
+        var r2 = document.createRange();
+        r2.setStart(node, i2);
+        r2.setEnd(node, Math.min(i2 + 20, node.textContent.length));
+        var s2 = document.createElement('span');
+        s2.className = 'tts-highlight';
+        s2.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
+        try { r2.surroundContents(s2); navigateToHighlight(s2); } catch(e) {}
+        break;
+      }
     }
   }
 }
