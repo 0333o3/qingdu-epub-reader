@@ -52,56 +52,90 @@ function getEnglishVoices() {
 }
 
 function getEpubBody() {
-  // Get all page divs' content
-  var scroller = document.getElementById('epub-scroller');
-  if (scroller) {
-    // Combine text from all pages
-    var pages = scroller.querySelectorAll('.epub-page');
-    if (pages.length > 0) return scroller;
-  }
-  return document.getElementById('epub-content') || document.body;
+  return document.getElementById('epub-scroller') ||
+         document.getElementById('epub-content') ||
+         document.body;
 }
 
-function extractSentences() {
+// Build text blocks: each block element (P, H1-6, LI, etc.) gets its own text chunk
+// Blocks are separated by newlines so titles like "I" don't merge with body
+function buildTextBlocks() {
   var body = getEpubBody();
-  if (!body) return [];
+  if (!body) return { text: '', blocks: [] };
 
-  var textParts = [];
+  var blocks = [];
+  var currentBlock = null;
+  var currentText = [];
+  var currentEl = null;
+
   var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
   var node;
-  var lastBlock = null;
   while ((node = walker.nextNode())) {
-    var t = node.textContent.trim();
-    if (!t) continue;
-    // Add newline between different block-level parents to separate titles from body
+    var t = node.textContent;
+    if (!t.trim()) continue;
+
+    // Find the nearest block-level parent
     var block = node.parentElement;
-    while (block && block !== body && !/^(P|H[1-6]|DIV|LI|BLOCKQUOTE)$/i.test(block.tagName)) {
+    while (block && block !== body) {
+      var tag = block.tagName;
+      if (tag === 'P' || tag === 'H1' || tag === 'H2' || tag === 'H3' ||
+          tag === 'H4' || tag === 'H5' || tag === 'H6' || tag === 'LI' ||
+          tag === 'BLOCKQUOTE' || tag === 'TD' || tag === 'TH' ||
+          block.classList.contains('calibre1') || block.classList.contains('s') ||
+          block.classList.contains('s1') || block.classList.contains('s5') ||
+          block.classList.contains('s6')) {
+        break;
+      }
       block = block.parentElement;
     }
-    if (lastBlock && block && block !== lastBlock) {
-      textParts.push('\n');
+
+    // If block changed, finalize the previous block
+    if (block !== currentBlock) {
+      if (currentText.length > 0) {
+        blocks.push({ text: currentText.join(' ').replace(/\s+/g, ' ').trim(), el: currentEl });
+      }
+      currentText = [];
+      currentBlock = block;
+      currentEl = node.parentElement;
+      while (currentEl && currentEl.parentElement !== block) {
+        currentEl = currentEl.parentElement;
+      }
     }
-    textParts.push(t);
-    lastBlock = block;
+
+    currentText.push(t.replace(/\s+/g, ' '));
+    if (!currentEl) currentEl = node.parentElement;
   }
 
-  var fullText = textParts.join(' ');
-  // Split on newlines first, then on sentence punctuation within each line
-  var lines = fullText.split('\n');
+  // Last block
+  if (currentText.length > 0) {
+    blocks.push({ text: currentText.join(' ').replace(/\s+/g, ' ').trim(), el: currentEl });
+  }
+
+  // Build full text with newlines between blocks
+  var text = blocks.map(function(b) { return b.text; }).join('\n');
+  return { text: text, blocks: blocks };
+}
+
+// Split text into sentences, respecting block boundaries
+function extractSentences() {
+  var result = buildTextBlocks();
+  var text = result.text;
+  if (!text) return [];
+
+  // Split on newlines first (block boundaries), then on punctuation within each line
+  var lines = text.split('\n');
   var sentences = [];
-  for (var li = 0; li < lines.length; li++) {
-    var line = lines[li].trim();
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
     if (!line) continue;
-    var parts = line.match(/[^.!?…]+[.!?…]*/g);
-    if (parts) {
-      for (var pi = 0; pi < parts.length; pi++) {
-        sentences.push(parts[pi].trim());
-      }
-    } else {
-      sentences.push(line);
+    // Split on .!? followed by space or end
+    var parts = line.split(/(?<=[.!?…])\s+/);
+    for (var j = 0; j < parts.length; j++) {
+      var s = parts[j].trim();
+      if (s) sentences.push(s);
     }
   }
-  return sentences.filter(function(s) { return s.trim().length > 10; });
+  return sentences.filter(function(s) { return s.length > 10; });
 }
 
 function startTTS(startIdx) {
@@ -118,94 +152,54 @@ function startTTS(startIdx) {
 }
 
 function startTTSFromParagraph(paraText, paraEl) {
-  // Build the SAME text that extractSentences uses
-  var body = getEpubBody();
-  var textParts = [];
-  var charCounts = [0];
-  var total = 0;
-  var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
-  var node;
-  var paraStartIdx = -1;
-  var lastBlock2 = null;
-
-  while ((node = walker.nextNode())) {
-    var txt = node.textContent;
-    var trimmed = txt.trim();
-    if (!trimmed) continue;
-
-    // Newline between different block parents (same logic as extractSentences)
-    var block = node.parentElement;
-    while (block && block !== body && !/^(P|H[1-6]|DIV|LI|BLOCKQUOTE)$/i.test(block.tagName)) {
-      block = block.parentElement;
-    }
-    if (lastBlock2 && block && block !== lastBlock2) {
-      textParts.push('\n');
-      total += 2;
-      charCounts.push(total);
-    }
-    lastBlock2 = block;
-
-    textParts.push(trimmed);
-    total += trimmed.length + 1;
-    charCounts.push(total);
-
-    // Check if this node is inside the paragraph
-    if (paraStartIdx < 0) {
-      var cur = node.parentElement;
-      while (cur && cur !== body) {
-        if (cur === paraEl) {
-          paraStartIdx = charCounts[charCounts.length - 2];
-          break;
-        }
-        cur = cur.parentElement;
-      }
-    }
-  }
-
-  var fullText = textParts.join(' ');
-
-  // Split on newlines first, then on sentence punctuation within each line
-  var lines = fullText.split('\n');
-  var allSents = [];
-  for (var li = 0; li < lines.length; li++) {
-    var line = lines[li].trim();
+  var result = buildTextBlocks();
+  ttsState.sentences = [];
+  var lines = result.text.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
     if (!line) continue;
-    var parts = line.match(/[^.!?…]+[.!?…]*/g);
-    if (parts) {
-      for (var pi = 0; pi < parts.length; pi++) {
-        allSents.push(parts[pi].trim());
-      }
-    } else {
-      allSents.push(line);
+    var parts = line.split(/(?<=[.!?…])\s+/);
+    for (var j = 0; j < parts.length; j++) {
+      var s = parts[j].trim();
+      if (s && s.length > 10) ttsState.sentences.push(s);
     }
   }
-  ttsState.sentences = allSents.filter(function(s) { return s.trim().length > 10; });
 
   if (ttsState.sentences.length === 0) {
     showToast('没有可朗读的文本');
     return;
   }
 
-  if (paraStartIdx >= 0) {
-    // Count sentences before position using same newline-then-punctuation logic
-    var before = fullText.substring(0, paraStartIdx);
-    var beforeLines = before.split('\n');
-    var count = 0;
-    for (var bi = 0; bi < beforeLines.length; bi++) {
-      var bl = beforeLines[bi].trim();
-      if (!bl) continue;
-      var bp = bl.match(/[^.!?…]+[.!?…]*/g);
-      if (bp) {
-        for (var bj = 0; bj < bp.length; bj++) {
-          if (bp[bj].trim().length > 10) count++;
+  // Find paragraph's first sentence by matching its text against blocks
+  var cleanPara = paraText.replace(/\s+/g, ' ').trim();
+  var charPos = 0;
+  for (var bi = 0; bi < result.blocks.length; bi++) {
+    var blockText = result.blocks[bi].text;
+    if (blockText.indexOf(cleanPara.substring(0, 40)) >= 0 ||
+        cleanPara.indexOf(blockText) >= 0) {
+      // Found the block containing this paragraph
+      // Count sentences before this block
+      var beforeText = result.blocks.slice(0, bi).map(function(b) { return b.text; }).join('\n');
+      var beforeLines = beforeText.split('\n');
+      var count = 0;
+      for (var li = 0; li < beforeLines.length; li++) {
+        var l = beforeLines[li].trim();
+        if (!l) continue;
+        var lparts = l.split(/(?<=[.!?…])\s+/);
+        for (var lj = 0; lj < lparts.length; lj++) {
+          if (lparts[lj].trim().length > 10) count++;
         }
-      } else if (bl.length > 10) {
-        count++;
       }
+      // Also count sentences within this block before the paragraph starts
+      if (beforeLines.length > 0) {
+        var currentLineSents = beforeLines[beforeLines.length - 1];
+        // This is approximate - we count all sentences in the block
+        // A more precise approach would find the exact sentence index
+      }
+      ttsState.currentSentence = Math.max(0, count);
+      break;
     }
-    ttsState.currentSentence = Math.max(0, count);
-  } else {
-    ttsState.currentSentence = 0;
+    charPos += blockText.length + 1;
   }
 
   ttsState.playing = true;
@@ -232,17 +226,13 @@ function speakCurrent() {
 
   utter.onend = function() {
     ttsState.currentSentence++;
-    if (ttsState.playing && !ttsState.paused) {
-      speakCurrent();
-    }
+    if (ttsState.playing && !ttsState.paused) speakCurrent();
   };
 
   utter.onerror = function(e) {
     if (e.error !== 'canceled' && e.error !== 'interrupted') {
       ttsState.currentSentence++;
-      if (ttsState.playing && !ttsState.paused) {
-        speakCurrent();
-      }
+      if (ttsState.playing && !ttsState.paused) speakCurrent();
     }
   };
 
@@ -298,66 +288,53 @@ function highlightSentence(text) {
   var body = getEpubBody();
   if (!body) return;
 
-  // Clean the search text
-  var search = text.replace(/\s+/g, ' ').trim();
-  var prefix = search.substring(0, 20);
-  if (prefix.length < 3) return;
+  // Find the first 20 chars of this sentence in any text node
+  var search = text.replace(/\s+/g, ' ').substring(0, 20).trim();
+  if (!search) return;
 
-  // Find the text node containing the prefix
+  // Walk text nodes looking for a match
   var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
   var node;
-  var foundNode = null, foundIdx = -1;
-
   while ((node = walker.nextNode())) {
-    var idx = node.textContent.replace(/\s+/g, ' ').indexOf(prefix);
-    if (idx >= 0) {
-      // Convert normalized-space index back to real index
-      var realIdx = 0;
-      var normPos = 0;
-      var raw = node.textContent;
-      while (normPos < idx && realIdx < raw.length) {
-        if (/\s/.test(raw[realIdx])) {
-          while (realIdx < raw.length && /\s/.test(raw[realIdx])) realIdx++;
-          normPos++;
-        } else {
-          realIdx++;
-          normPos++;
-        }
-      }
-      foundNode = node;
-      foundIdx = realIdx;
-      break;
-    }
-  }
+    // Normalize whitespace for matching
+    var raw = node.textContent;
+    var norm = raw.replace(/\s+/g, ' ');
+    var idx = norm.indexOf(search);
+    if (idx < 0) continue;
 
-  if (foundNode && foundIdx >= 0) {
-    var range = document.createRange();
-    var endIdx = Math.min(foundIdx + 40, foundNode.textContent.length);
-    range.setStart(foundNode, foundIdx);
-    range.setEnd(foundNode, endIdx);
-    var span = document.createElement('span');
-    span.className = 'tts-highlight';
-    span.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
-    try {
-      range.surroundContents(span);
-      navigateToHighlight(span);
-    } catch(e) {
-      // Fallback: just wrap the text node content
-      var parent = foundNode.parentNode;
-      if (parent) {
-        var before = foundNode.textContent.substring(0, foundIdx);
-        var hl = foundNode.textContent.substring(foundIdx, endIdx);
-        var after = foundNode.textContent.substring(endIdx);
-        parent.replaceChild(document.createTextNode(before), foundNode);
-        var hlSpan = document.createElement('span');
-        hlSpan.className = 'tts-highlight';
-        hlSpan.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
-        hlSpan.textContent = hl;
-        parent.insertBefore(hlSpan, foundNode.nextSibling);
-        parent.insertBefore(document.createTextNode(after), hlSpan.nextSibling);
-        navigateToHighlight(hlSpan);
+    // Convert normalized index to raw index
+    var rawIdx = 0, normPos = 0;
+    while (normPos < idx && rawIdx < raw.length) {
+      if (/\s/.test(raw[rawIdx])) {
+        while (rawIdx < raw.length && /\s/.test(raw[rawIdx])) rawIdx++;
+        normPos++;
+      } else {
+        rawIdx++;
+        normPos++;
       }
     }
+
+    // Highlight a chunk of reasonable length
+    var hlLen = Math.min(100, raw.length - rawIdx);
+    var before = raw.substring(0, rawIdx);
+    var hl = raw.substring(rawIdx, rawIdx + hlLen);
+    var after = raw.substring(rawIdx + hlLen);
+
+    var parent = node.parentNode;
+    if (!parent) break;
+
+    // Replace text node with three parts
+    var afterNode = document.createTextNode(after);
+    var hlNode = document.createElement('span');
+    hlNode.className = 'tts-highlight';
+    hlNode.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
+    hlNode.textContent = hl;
+    parent.replaceChild(afterNode, node);
+    parent.insertBefore(hlNode, afterNode);
+    parent.insertBefore(document.createTextNode(before), hlNode);
+
+    navigateToHighlight(hlNode);
+    break;
   }
 }
 
@@ -365,21 +342,18 @@ function navigateToHighlight(el) {
   var scroller = document.getElementById('epub-scroller');
   if (!scroller || typeof pageWidth === 'undefined' || !pageWidth) return;
 
-  // Walk up DOM tree to find the page container
   var page = el;
   while (page && !page.classList.contains('epub-page')) {
     page = page.parentElement;
   }
   if (!page) return;
 
-  // Find page index
   var pages = scroller.querySelectorAll('.epub-page');
   var targetPage = 0;
   for (var i = 0; i < pages.length; i++) {
     if (pages[i] === page) { targetPage = i; break; }
   }
 
-  // Scroll if needed
   if (targetPage !== currentPage) {
     currentPage = targetPage;
     scroller.scrollTo({ left: targetPage * pageWidth, behavior: 'smooth' });
