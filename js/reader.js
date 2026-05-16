@@ -35,22 +35,19 @@ function loadAndRender(book) {
 
     var scroller = document.getElementById('epub-scroller');
     if (scroller) {
-      var lastSnapTime = 0;
+      // Track page changes without interfering with native scroll momentum
       scroller.addEventListener('scroll', function() {
         var pg = Math.round(scroller.scrollLeft / pageWidth);
         if (pg !== currentPage && pg >= 0 && pg < totalPages) {
-          var now = Date.now();
-          // Prevent rapid multi-page flips (debounce 600ms)
-          if (now - lastSnapTime > 600) {
-            currentPage = pg;
-            lastSnapTime = now;
-            updateProgress();
-            scheduleSave();
-            // Force snap to exact position
-            scroller.scrollTo({ left: pg * pageWidth, behavior: 'smooth' });
-          }
+          currentPage = pg;
+          updateProgress();
         }
       }, { passive: true });
+
+      // Save progress when scrolling stops
+      scroller.addEventListener('touchend', function() {
+        scheduleSave();
+      });
 
       // Jump to saved page
       if (currentPage > 0 && currentPage < totalPages) {
