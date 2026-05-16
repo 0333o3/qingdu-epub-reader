@@ -57,7 +57,6 @@ function loadAndRender(book) {
     }
 
     updateProgress();
-    setupParagraphTap();
   }).catch(function(err) {
     console.error('Render error:', err);
     content.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:60vh;color:#ef4444;font-size:14px;text-align:center;padding:20px;">无法打开此书籍<br><span style="font-size:12px;color:#9ca3af;">' + (err.message || '格式不兼容') + '</span></div>';
@@ -100,20 +99,7 @@ window.addEventListener('message', function(e) {
   }
 });
 
-// Tap paragraph to start TTS from there
-function setupParagraphTap() {
-  var scroller = document.getElementById('epub-scroller');
-  if (!scroller) return;
-
-  scroller.addEventListener('click', function(e) {
-    var p = e.target.closest('p');
-    if (!p) return;
-    var text = p.textContent.trim();
-    if (text.length > 20) {
-      startTTSFromParagraph(text, p);
-    }
-  });
-}
+// TTS is controlled via the TTS button only (no auto paragraph tap)
 
 function changeFontSize(delta) {
   fontSize = Math.max(12, Math.min(26, fontSize + delta));
