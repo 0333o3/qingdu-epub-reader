@@ -93,45 +93,56 @@ function startTTS(startIdx) {
 }
 
 function startTTSFromParagraph(paraText, paraEl) {
-  ttsState.sentences = extractSentences();
+  // Build the SAME text that extractSentences uses
+  var body = getEpubBody();
+  var textParts = [];
+  var charCounts = [0];  // cumulative char count after each part
+  var total = 0;
+  var nodeTextMap = [];  // track which nodes belong to which text part
+
+  var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+  var node;
+  var paraStartIdx = -1;
+
+  while ((node = walker.nextNode())) {
+    var txt = node.textContent;
+    var trimmed = txt.trim();
+    if (trimmed) {
+      textParts.push(trimmed);
+      total += trimmed.length + 1;  // +1 for the join space
+      charCounts.push(total);
+
+      // Check if this node is inside the paragraph
+      if (paraStartIdx < 0) {
+        var cur = node.parentElement;
+        while (cur && cur !== body) {
+          if (cur === paraEl) {
+            // paraStartIdx = total chars before this text part
+            paraStartIdx = charCounts[charCounts.length - 2];
+            break;
+          }
+          cur = cur.parentElement;
+        }
+      }
+    }
+  }
+
+  var fullText = textParts.join(' ');
+
+  ttsState.sentences = [];
+  var sents = fullText.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
+  ttsState.sentences = sents.filter(function(s) { return s.trim().length > 10; });
+
   if (ttsState.sentences.length === 0) {
     showToast('没有可朗读的文本');
     return;
   }
 
-  // Find paragraph position by walking text nodes and checking DOM containment
-  var body = getEpubBody();
-  var charCount = 0;
-  var paraStartIdx = -1;
-  var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
-  var node;
-
-  while ((node = walker.nextNode())) {
-    var isInsidePara = false;
-    var cur = node.parentElement;
-    while (cur && cur !== body) {
-      if (cur === paraEl) { isInsidePara = true; break; }
-      cur = cur.parentElement;
-    }
-    if (isInsidePara && paraStartIdx < 0) {
-      paraStartIdx = charCount;
-      break;
-    }
-    charCount += node.textContent.length;
-  }
-
-  // If not found by DOM, try exact text match as fallback
-  if (paraStartIdx < 0) {
-    var bodyText = body.textContent;
-    var cleanPara = paraText.replace(/\s+/g, ' ').substring(0, 40).trim();
-    paraStartIdx = bodyText.indexOf(cleanPara);
-  }
-
   if (paraStartIdx >= 0) {
-    // Count sentences in text before this position
-    var beforeText = body.textContent.substring(0, paraStartIdx);
-    var sents = beforeText.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
-    ttsState.currentSentence = Math.max(0, sents.length);
+    // Find which sentence this position falls in
+    var before = fullText.substring(0, paraStartIdx);
+    var sentsBefore = before.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
+    ttsState.currentSentence = Math.max(0, sentsBefore.length);
   } else {
     ttsState.currentSentence = 0;
   }
