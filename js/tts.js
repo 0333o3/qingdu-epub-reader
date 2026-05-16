@@ -314,24 +314,20 @@ function highlightSentence(text) {
       }
     }
 
-    // Highlight a chunk of reasonable length
-    var hlLen = Math.min(100, raw.length - rawIdx);
+    // Highlight full remaining text in this node
     var before = raw.substring(0, rawIdx);
-    var hl = raw.substring(rawIdx, rawIdx + hlLen);
-    var after = raw.substring(rawIdx + hlLen);
-
+    var hl = raw.substring(rawIdx);
     var parent = node.parentNode;
     if (!parent) break;
 
-    // Replace text node with three parts
-    var afterNode = document.createTextNode(after);
     var hlNode = document.createElement('span');
     hlNode.className = 'tts-highlight';
     hlNode.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
     hlNode.textContent = hl;
-    parent.replaceChild(afterNode, node);
-    parent.insertBefore(hlNode, afterNode);
-    parent.insertBefore(document.createTextNode(before), hlNode);
+    parent.replaceChild(hlNode, node);
+    if (before) {
+      parent.insertBefore(document.createTextNode(before), hlNode);
+    }
 
     navigateToHighlight(hlNode);
     break;
