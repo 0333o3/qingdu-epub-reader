@@ -134,7 +134,13 @@ function renderEpubTo(epub, container) {
       if (pageWidth <= 0) pageWidth = 320;
       if (pageHeight <= 0) pageHeight = 400;
 
-      var fullHtml = '<style>body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;text-align:left !important;}p{text-indent:2em !important;margin-bottom:0.6em !important;}img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}body{padding:16px 20px 40px !important;margin:0 !important;}</style>' + fullHtml;
+      var fullHtml = '<style>' +
+        'body{margin:0 !important;padding:0 !important;}' +
+        'p{margin:0 0 0.8em 0 !important;text-indent:2em !important;padding:0 !important;}' +
+        'div,h1,h2,h3,h4,h5,h6,li,blockquote{text-indent:0 !important;}' +
+        'img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}' +
+        'body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;text-align:left !important;}' +
+        '</style>' + fullHtml;
 
       // Build pages using a measurement div
       var pages = buildPages(fullHtml, pageWidth, pageHeight);
@@ -151,9 +157,10 @@ function renderEpubTo(epub, container) {
         page.className = 'epub-page';
         page.style.cssText = 'min-width:' + pageWidth + 'px;max-width:' + pageWidth + 'px;' +
           'height:' + pageHeight + 'px;' +
-          'scroll-snap-align:start;' +
+          'scroll-snap-align:start;scroll-snap-stop:always;' +
           'overflow-y:auto;overflow-x:hidden;' +
           '-webkit-overflow-scrolling:touch;' +
+          'padding:12px 16px;' +
           'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;' +
           'font-size:18px;line-height:1.8;' +
           'color:#1a1a1a;background:#fff;' +

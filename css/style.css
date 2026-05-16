@@ -253,11 +253,13 @@ body {
   overflow-y: hidden;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
+  scroll-snap-stop: always;
   height: 100%;
   width: 100%;
 }
 .epub-page {
   scroll-snap-align: start;
+  scroll-snap-stop: always;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
