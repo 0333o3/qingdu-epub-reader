@@ -16,36 +16,54 @@ async function lookupWord(word) {
   const key = word.toLowerCase();
   if (DICT_CACHE.has(key)) return DICT_CACHE.get(key);
 
+  var enPromise = fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(key))
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .catch(function() { return null; });
+
+  var zhPromise = fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(key) + '&langpair=en|zh')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d && d.responseData && d.responseData.translatedText &&
+          d.responseData.translatedText.toLowerCase() !== key.toLowerCase()) {
+        return d.responseData.translatedText;
+      }
+      return null;
+    })
+    .catch(function() { return null; });
+
   try {
-    const resp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(key)}`);
-    if (!resp.ok) throw new Error('Not found');
-    const data = await resp.json();
-    const result = parseDictResponse(data, word);
+    var results = await Promise.all([enPromise, zhPromise]);
+    var enData = results[0];
+    var zhText = results[1];
+    var result = parseDictResponse(enData, word, zhText);
     DICT_CACHE.set(key, result);
     return result;
-  } catch {
-    return { word, phonetic: null, audioUrl: null, definitions: [] };
+  } catch(e) {
+    return { word: word, phonetic: null, audioUrl: null, definitions: [], zhCn: null };
   }
 }
 
-function parseDictResponse(data, word) {
-  const entry = Array.isArray(data) ? data[0] : data;
-  if (!entry) return { word, phonetic: null, audioUrl: null, definitions: [] };
+function parseDictResponse(data, word, zhText) {
+  var entry = Array.isArray(data) ? data[0] : data;
+  if (!entry) return { word: word, phonetic: null, audioUrl: null, definitions: [], zhCn: zhText };
 
-  let phonetic = null;
-  let audioUrl = null;
+  var phonetic = null;
+  var audioUrl = null;
 
   if (entry.phonetics) {
-    for (const p of entry.phonetics) {
+    for (var i = 0; i < entry.phonetics.length; i++) {
+      var p = entry.phonetics[i];
       if (p.text && !phonetic) phonetic = p.text;
       if (p.audio && !audioUrl) audioUrl = p.audio;
     }
   }
 
-  const definitions = [];
+  var definitions = [];
   if (entry.meanings) {
-    for (const m of entry.meanings) {
-      for (const d of (m.definitions || []).slice(0, 3)) {
+    for (var mi = 0; mi < entry.meanings.length; mi++) {
+      var m = entry.meanings[mi];
+      for (var di = 0; di < (m.definitions || []).length && di < 3; di++) {
+        var d = m.definitions[di];
         definitions.push({
           pos: m.partOfSpeech,
           definition: d.definition,
@@ -55,7 +73,7 @@ function parseDictResponse(data, word) {
     }
   }
 
-  return { word, phonetic, audioUrl, definitions: definitions.slice(0, 6) };
+  return { word: word, phonetic: phonetic, audioUrl: audioUrl, definitions: definitions.slice(0, 6), zhCn: zhText };
 }
 
 // Popover UI
@@ -68,17 +86,19 @@ function showPopover(result) {
   const phoneticEl = document.getElementById('popover-phonetic');
   phoneticEl.textContent = result.phonetic ? result.phonetic : '';
 
+  var zhHtml = result.zhCn ? '<div style="color:#4f46e5;font-size:18px;font-weight:600;margin-bottom:12px;">' + result.zhCn + '</div>' : '';
+
   const defsEl = document.getElementById('popover-definitions');
-  if (result.definitions.length === 0) {
+  if (result.definitions.length === 0 && !result.zhCn) {
     defsEl.innerHTML = '<div class="popover-loading">未找到释义</div>';
   } else {
-    defsEl.innerHTML = result.definitions.map(d =>
-      `<div class="def-item">
-        <span class="pos">${d.pos || ''}</span>
-        <span class="def-text">${d.definition}</span>
-        ${d.example ? `<div class="def-example">"${d.example}"</div>` : ''}
-      </div>`
-    ).join('');
+    defsEl.innerHTML = zhHtml + result.definitions.map(function(d) {
+      return '<div class="def-item">' +
+        '<span class="pos">' + (d.pos || '') + '</span>' +
+        '<span class="def-text">' + d.definition + '</span>' +
+        (d.example ? '<div class="def-example">"' + d.example + '"</div>' : '') +
+        '</div>';
+    }).join('');
   }
 
   const pronounceBtn = document.getElementById('popover-pronounce');
@@ -130,6 +150,7 @@ async function saveToVocabulary(result, btn) {
     id: 'vocab_' + Date.now(),
     word: result.word,
     phonetic: result.phonetic,
+    zhCn: result.zhCn || '',
     definition: result.definitions[0]?.definition || '',
     pos: result.definitions[0]?.pos || '',
     fullDefs: result.definitions,

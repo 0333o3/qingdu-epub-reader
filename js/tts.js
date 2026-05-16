@@ -51,25 +51,26 @@ function getEnglishVoices() {
   return speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
 }
 
-function extractSentences() {
-  const iframe = document.querySelector('#reader-content iframe');
-  if (!iframe || !iframe.contentDocument) return [];
+function getEpubBody() {
+  var el = document.getElementById('epub-content');
+  return el || document.body;
+}
 
-  const body = iframe.contentDocument.body;
+function extractSentences() {
+  var body = getEpubBody();
   if (!body) return [];
 
-  // Get all text nodes, split into sentences
-  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
-  const textParts = [];
-  let node;
+  var textParts = [];
+  var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+  var node;
   while ((node = walker.nextNode())) {
-    textParts.push(node.textContent.trim());
+    var t = node.textContent.trim();
+    if (t) textParts.push(t);
   }
 
-  const fullText = textParts.join(' ');
-  // Split on sentence boundaries
-  const sentences = fullText.match(/[^.!?…\n]+[.!?…]*[\n”"」』]?/g) || [];
-  return sentences.filter(s => s.trim().length > 0);
+  var fullText = textParts.join(' ');
+  var sentences = fullText.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
+  return sentences.filter(function(s) { return s.trim().length > 10; });
 }
 
 function startTTS() {
@@ -165,42 +166,38 @@ function updateTTSButton() {
 
 function highlightSentence(text) {
   clearHighlight();
-  const iframe = document.querySelector('#reader-content iframe');
-  if (!iframe || !iframe.contentDocument) return;
-  const body = iframe.contentDocument.body;
+  var body = getEpubBody();
   if (!body) return;
 
-  // Find and highlight the sentence text
-  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
-  const cleanSearch = text.substring(0, 30).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  let node;
+  var prefix = text.substring(0, 30);
+  var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+  var node;
   while ((node = walker.nextNode())) {
-    if (node.textContent.includes(text.substring(0, 30))) {
-      const range = document.createRange();
-      const idx = node.textContent.indexOf(text.substring(0, 30));
-      if (idx >= 0) {
-        range.setStart(node, idx);
-        range.setEnd(node, Math.min(idx + text.length, node.textContent.length));
-        const span = iframe.contentDocument.createElement('span');
-        span.className = 'tts-highlight';
-        try {
-          range.surroundContents(span);
-          span.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } catch {}
-        break;
-      }
+    if (node.textContent.indexOf(prefix) >= 0) {
+      var range = document.createRange();
+      var idx = node.textContent.indexOf(prefix);
+      range.setStart(node, idx);
+      range.setEnd(node, Math.min(idx + text.length, node.textContent.length));
+      var span = document.createElement('span');
+      span.className = 'tts-highlight';
+      span.style.cssText = 'background:rgba(79,70,229,0.15);border-radius:2px;';
+      try {
+        range.surroundContents(span);
+        span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch(e) {}
+      break;
     }
   }
 }
 
 function clearHighlight() {
-  const iframe = document.querySelector('#reader-content iframe');
-  if (!iframe || !iframe.contentDocument) return;
-  iframe.contentDocument.querySelectorAll('.tts-highlight').forEach(el => {
-    const parent = el.parentNode;
+  var body = getEpubBody();
+  if (!body) return;
+  body.querySelectorAll('.tts-highlight').forEach(function(el) {
+    var parent = el.parentNode;
     while (el.firstChild) parent.insertBefore(el.firstChild, el);
     parent.removeChild(el);
-    parent.normalize();
+    if (parent.normalize) parent.normalize();
   });
 }
 

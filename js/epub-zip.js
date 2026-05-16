@@ -133,7 +133,7 @@ function renderEpubTo(epub, container) {
       wrapper.style.cssText = 'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;font-size:18px;line-height:1.8;padding:16px 20px 40px;color:#1a1a1a !important;background:#fff;word-wrap:break-word;overflow-wrap:break-word;';
 
       // Wrap in a style tag to override any EPUB CSS
-      fullHtml = '<style>body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;text-align:left !important;}img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}</style>' + fullHtml;
+      fullHtml = '<style>body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;text-align:left !important;}p{text-indent:2em !important;margin-bottom:0.6em !important;}img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}</style>' + fullHtml;
 
       wrapper.innerHTML = fullHtml;
 

@@ -38,8 +38,8 @@ function renderVocabulary(filter) {
       html += `
         <div class="vocab-item" data-id="${w.id}">
           <div>
-            <div class="word">${w.word} ${w.phonetic ? `<span style="font-size:12px;color:#9ca3af;font-weight:400">${w.phonetic}</span>` : ''}</div>
-            <div class="meaning">${w.pos ? `<span style="color:#4f46e5;font-size:10px">${w.pos}</span> ` : ''}${w.definition}</div>
+            <div class="word">${w.word} ${w.zhCn ? '<span style="font-size:14px;color:#4f46e5;font-weight:600">' + w.zhCn + '</span>' : ''} ${w.phonetic ? '<span style="font-size:11px;color:#9ca3af;font-weight:400">' + w.phonetic + '</span>' : ''}</div>
+            <div class="meaning">${w.pos ? '<span style="color:#4f46e5;font-size:10px">' + w.pos + '</span> ' : ''}${w.definition}</div>
           </div>
           <button class="btn-delete-word" data-delete="${w.id}" aria-label="删除">✕</button>
         </div>
@@ -59,7 +59,8 @@ function renderVocabulary(filter) {
           word: w.word,
           phonetic: w.phonetic,
           audioUrl: w.audioUrl,
-          definitions: w.fullDefs
+          definitions: w.fullDefs,
+          zhCn: w.zhCn || null
         });
       }
     });
