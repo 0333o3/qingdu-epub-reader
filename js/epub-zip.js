@@ -43,6 +43,19 @@ function parseEpub(arrayBuffer) {
           }
         }
 
+        // Parse TOC from NCX file
+        epub.toc = [];
+        var ncxFile = z.file(epub._basePath + 'toc.ncx');
+        if (ncxFile) {
+          ncxFile.async('string').then(function(ncx) {
+            var re = /<navPoint[^>]*>[\s\S]*?<navLabel>[\s\S]*?<text>([\s\S]*?)<\/text>[\s\S]*?<\/navLabel>[\s\S]*?<content[^>]*src="([^"]*)"[^>]*\/>[\s\S]*?<\/navPoint>/gi;
+            var m;
+            while ((m = re.exec(ncx))) {
+              epub.toc.push({ label: m[1].trim(), href: m[2] });
+            }
+          }).catch(function() {});
+        }
+
         return epub;
       });
     });
@@ -115,17 +128,20 @@ function renderEpubTo(epub, container) {
       });
 
       // Replace image src and xlink:href with blob URLs
-      var fullHtml = htmls.map(function(html) {
+      // Also add file markers for TOC mapping
+      var fullHtml = htmls.map(function(html, idx) {
+        var href = epub.spine[idx] || '';
+        var marker = '<span class="epub-file-marker" data-file="' + href + '" style="display:none;"></span>';
         html = html.replace(/src="([^"]+)"/gi, function(m, src) {
           if (imgMap[src]) return 'src="' + imgMap[src] + '"';
           return m;
         });
-        html = html.replace(/xlink:href="([^"]+)"/gi, function(m, href) {
-          if (imgMap[href]) return 'xlink:href="' + imgMap[href] + '"';
+        html = html.replace(/xlink:href="([^"]+)"/gi, function(m, h) {
+          if (imgMap[h]) return 'xlink:href="' + imgMap[h] + '"';
           return m;
         });
-        return html;
-      }).join('\n<hr style="border:none;margin:20px 0;"/>');
+        return marker + html;
+      }).join('\n<hr class="epub-chapter-break" style="border:none;margin:20px 0;"/>');
 
       // Render with pagination using native scroll-snap
       var pageWidth = container.clientWidth || window.innerWidth;
@@ -153,6 +169,7 @@ function renderEpubTo(epub, container) {
       for (var i = 0; i < pages.length; i++) {
         var page = document.createElement('div');
         page.className = 'epub-page';
+        page.setAttribute('data-page', i);
         page.style.cssText = 'min-width:' + pageWidth + 'px;max-width:' + pageWidth + 'px;' +
           'height:' + pageHeight + 'px;' +
           'scroll-snap-align:start;scroll-snap-stop:always;' +
@@ -170,10 +187,28 @@ function renderEpubTo(epub, container) {
       container.innerHTML = '';
       container.appendChild(scroller);
 
+      // Build TOC → page mapping
+      var tocMap = [];
+      if (epub.toc && epub.toc.length > 0) {
+        var pageEls = scroller.querySelectorAll('.epub-page');
+        for (var pi = 0; pi < pageEls.length; pi++) {
+          var markers = pageEls[pi].querySelectorAll('.epub-file-marker');
+          for (var mi = 0; mi < markers.length; mi++) {
+            var f = markers[mi].getAttribute('data-file');
+            for (var ti = 0; ti < epub.toc.length; ti++) {
+              if (epub.toc[ti].href === f) {
+                tocMap.push({ label: epub.toc[ti].label, page: pi });
+              }
+            }
+          }
+        }
+      }
+      window._epubTocMap = tocMap;
+
       // Setup word-tap on each page
       setupWordTapOnDiv(scroller);
 
-      return { container: scroller, pageWidth: pageWidth, pageHeight: pageHeight, totalPages: pages.length };
+      return { container: scroller, pageWidth: pageWidth, pageHeight: pageHeight, totalPages: pages.length, tocMap: tocMap };
     });
   });
 }
