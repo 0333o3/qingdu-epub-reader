@@ -21,10 +21,13 @@ function parseEpub(arrayBuffer) {
         epub._manifest = {};
         var manMatch = opf.match(/<manifest[^>]*>([\s\S]*?)<\/manifest>/i);
         if (manMatch) {
-          var re = /<item[^>]+id="([^"]*)"[^>]+href="([^"]*)"[^>]*>/gi;
+          // Handle both id-first and href-first order
+        var re = /<item\s+[^>]*?(?:id="([^"]*)"[^>]*?href="([^"]*)"|href="([^"]*)"[^>]*?id="([^"]*)")[^>]*?\/?>/gi;
           var item;
           while ((item = re.exec(manMatch[1]))) {
-            epub._manifest[item[1]] = item[2];
+            var mid = item[1] || item[4];
+            var mhref = item[2] || item[3];
+            if (mid && mhref) epub._manifest[mid] = mhref;
           }
         }
 
@@ -62,12 +65,18 @@ function renderEpubTo(epub, container) {
   });
 
   return Promise.all(loads).then(function(htmls) {
-    // Collect all image references
+    // Collect all image references (src and xlink:href)
     var allImages = {};
     htmls.forEach(function(html) {
       html.replace(/src="([^"]+)"/gi, function(m, src) {
         if (!/^(https?:|data:)/i.test(src)) {
           allImages[src] = true;
+        }
+        return m;
+      });
+      html.replace(/xlink:href="([^"]+)"/gi, function(m, href) {
+        if (!/^(https?:|data:)/i.test(href)) {
+          allImages[href] = true;
         }
         return m;
       });
@@ -105,12 +114,17 @@ function renderEpubTo(epub, container) {
         if (r) imgMap[r.src] = r.url;
       });
 
-      // Replace image src with blob URLs
+      // Replace image src and xlink:href with blob URLs
       var fullHtml = htmls.map(function(html) {
-        return html.replace(/src="([^"]+)"/gi, function(m, src) {
+        html = html.replace(/src="([^"]+)"/gi, function(m, src) {
           if (imgMap[src]) return 'src="' + imgMap[src] + '"';
           return m;
         });
+        html = html.replace(/xlink:href="([^"]+)"/gi, function(m, href) {
+          if (imgMap[href]) return 'xlink:href="' + imgMap[href] + '"';
+          return m;
+        });
+        return html;
       }).join('\n<hr style="border:none;margin:20px 0;"/>');
 
       // Render in a div directly (not iframe)
@@ -119,7 +133,7 @@ function renderEpubTo(epub, container) {
       wrapper.style.cssText = 'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;font-size:18px;line-height:1.8;padding:16px 20px 40px;color:#1a1a1a !important;background:#fff;word-wrap:break-word;overflow-wrap:break-word;';
 
       // Wrap in a style tag to override any EPUB CSS
-      fullHtml = '<style>body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;}img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}</style>' + fullHtml;
+      fullHtml = '<style>body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;text-align:left !important;}img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}</style>' + fullHtml;
 
       wrapper.innerHTML = fullHtml;
 
