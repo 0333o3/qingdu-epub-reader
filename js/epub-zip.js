@@ -266,27 +266,71 @@ function buildPages(fullHtml, pageWidth, pageHeight) {
   document.body.appendChild(measure);
 
   var contentHeight = pageHeight - 40;
-  var blocks = measure.querySelectorAll('p, h1, h2, h3, h4, h5, h6, img, blockquote, li, hr, table, pre, div.epub-section, div.calibre, div.calibre1, div.s, div.s1, div[style*="text-align"]');
-  if (blocks.length === 0) blocks = measure.querySelectorAll('div, p, span');
-
   var pages = [];
-  var tempPage = document.createElement('div');
-  tempPage.style.cssText = 'width:' + pageWidth + 'px;height:auto;overflow:hidden;';
-  measure.appendChild(tempPage);
 
-  for (var i = 0; i < blocks.length; i++) {
-    var clone = blocks[i].cloneNode(true);
-    tempPage.appendChild(clone);
+  // Paginate each epub-section independently (avoids duplication)
+  var sections = measure.querySelectorAll('.epub-section');
+  if (sections.length > 0) {
+    for (var si = 0; si < sections.length; si++) {
+      // Get blocks within this section
+      var sectionBlocks = sections[si].querySelectorAll('p, h1, h2, h3, h4, h5, h6, img, blockquote, li, hr, table, pre, div.calibre, div.calibre1, div.s, div.s1, div[style*="text-align"]');
+      if (sectionBlocks.length === 0) {
+        sectionBlocks = sections[si].querySelectorAll('div, p, span');
+      }
+      if (sectionBlocks.length === 0) {
+        // Empty or text-only section, include the whole section
+        pages.push(sections[si].outerHTML);
+        continue;
+      }
 
-    if (tempPage.scrollHeight > contentHeight) {
-      tempPage.removeChild(clone);
-      if (tempPage.innerHTML.trim()) pages.push(tempPage.innerHTML);
-      tempPage.innerHTML = '';
-      tempPage.appendChild(clone);
+      var tempPage = document.createElement('div');
+      tempPage.style.cssText = 'width:' + pageWidth + 'px;height:auto;overflow:hidden;';
+      measure.appendChild(tempPage);
+
+      for (var i = 0; i < sectionBlocks.length; i++) {
+        var clone = sectionBlocks[i].cloneNode(true);
+        tempPage.appendChild(clone);
+
+        if (tempPage.scrollHeight > contentHeight) {
+          tempPage.removeChild(clone);
+          if (tempPage.innerHTML.trim()) {
+            // Wrap in the section div to preserve data-file
+            var sectionClone = sections[si].cloneNode(false);
+            sectionClone.innerHTML = tempPage.innerHTML;
+            pages.push(sectionClone.outerHTML);
+          }
+          tempPage.innerHTML = '';
+          tempPage.appendChild(clone);
+        }
+      }
+      if (tempPage.innerHTML.trim()) {
+        var sectionClone = sections[si].cloneNode(false);
+        sectionClone.innerHTML = tempPage.innerHTML;
+        pages.push(sectionClone.outerHTML);
+      }
+      if (tempPage.parentNode) tempPage.parentNode.removeChild(tempPage);
     }
+  } else {
+    // No sections: use old block-based pagination
+    var blocks = measure.querySelectorAll('p, h1, h2, h3, h4, h5, h6, img, blockquote, li, hr, table, pre, div');
+    if (blocks.length === 0) blocks = measure.querySelectorAll('div, p, span');
+    var tempPage = document.createElement('div');
+    tempPage.style.cssText = 'width:' + pageWidth + 'px;height:auto;overflow:hidden;';
+    measure.appendChild(tempPage);
+    for (var b = 0; b < blocks.length; b++) {
+      var c = blocks[b].cloneNode(true);
+      tempPage.appendChild(c);
+      if (tempPage.scrollHeight > contentHeight) {
+        tempPage.removeChild(c);
+        if (tempPage.innerHTML.trim()) pages.push(tempPage.innerHTML);
+        tempPage.innerHTML = '';
+        tempPage.appendChild(c);
+      }
+    }
+    if (tempPage.innerHTML.trim()) pages.push(tempPage.innerHTML);
+    if (tempPage.parentNode) tempPage.parentNode.removeChild(tempPage);
   }
-  if (tempPage.innerHTML.trim()) pages.push(tempPage.innerHTML);
-  if (tempPage.parentNode) tempPage.parentNode.removeChild(tempPage);
+
   document.body.removeChild(measure);
   if (pages.length === 0) pages.push(fullHtml);
   return pages;
