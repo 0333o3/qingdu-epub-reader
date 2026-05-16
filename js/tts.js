@@ -139,9 +139,10 @@ function startTTSFromParagraph(paraText, paraEl) {
   }
 
   if (paraStartIdx >= 0) {
-    // Find which sentence this position falls in
+    // Find which sentence this position falls in, filtering short ones to match ttsState.sentences
     var before = fullText.substring(0, paraStartIdx);
-    var sentsBefore = before.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
+    var allBefore = before.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
+    var sentsBefore = allBefore.filter(function(s) { return s.trim().length > 10; });
     ttsState.currentSentence = Math.max(0, sentsBefore.length);
   } else {
     ttsState.currentSentence = 0;
