@@ -128,8 +128,8 @@ function extractSentences() {
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i].trim();
     if (!line) continue;
-    // Split on .!? followed by space or end
-    var parts = line.split(/(?<=[.!?…])\s+/);
+    // Split on .!? … followed by space (avoid lookbehind for mobile compat)
+    var parts = line.replace(/([.!?…])\s+/g, '$1\n').split('\n');
     for (var j = 0; j < parts.length; j++) {
       var s = parts[j].trim();
       if (s) sentences.push(s);
@@ -158,7 +158,7 @@ function startTTSFromParagraph(paraText, paraEl) {
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i].trim();
     if (!line) continue;
-    var parts = line.split(/(?<=[.!?…])\s+/);
+    var parts = line.replace(/([.!?…])\s+/g, '$1\n').split('\n');
     for (var j = 0; j < parts.length; j++) {
       var s = parts[j].trim();
       if (s && s.length > 10) ttsState.sentences.push(s);
@@ -170,36 +170,54 @@ function startTTSFromParagraph(paraText, paraEl) {
     return;
   }
 
-  // Find paragraph's first sentence by matching its text against blocks
-  var cleanPara = paraText.replace(/\s+/g, ' ').trim();
-  var charPos = 0;
+  // Find which block contains the paragraph element (DOM containment)
+  var targetBlockIdx = -1;
   for (var bi = 0; bi < result.blocks.length; bi++) {
-    var blockText = result.blocks[bi].text;
-    if (blockText.indexOf(cleanPara.substring(0, 40)) >= 0 ||
-        cleanPara.indexOf(blockText) >= 0) {
-      // Found the block containing this paragraph
-      // Count sentences before this block
-      var beforeText = result.blocks.slice(0, bi).map(function(b) { return b.text; }).join('\n');
-      var beforeLines = beforeText.split('\n');
-      var count = 0;
-      for (var li = 0; li < beforeLines.length; li++) {
-        var l = beforeLines[li].trim();
-        if (!l) continue;
-        var lparts = l.split(/(?<=[.!?…])\s+/);
-        for (var lj = 0; lj < lparts.length; lj++) {
-          if (lparts[lj].trim().length > 10) count++;
-        }
-      }
-      // Also count sentences within this block before the paragraph starts
-      if (beforeLines.length > 0) {
-        var currentLineSents = beforeLines[beforeLines.length - 1];
-        // This is approximate - we count all sentences in the block
-        // A more precise approach would find the exact sentence index
-      }
-      ttsState.currentSentence = Math.max(0, count);
+    var blockEl = result.blocks[bi].el;
+    if (blockEl && (blockEl === paraEl || blockEl.contains(paraEl) || paraEl.contains(blockEl))) {
+      targetBlockIdx = bi;
       break;
     }
-    charPos += blockText.length + 1;
+  }
+
+  if (targetBlockIdx >= 0) {
+    // Count sentences before this block
+    var beforeBlocks = result.blocks.slice(0, targetBlockIdx);
+    var count = 0;
+    for (var bi2 = 0; bi2 < beforeBlocks.length; bi2++) {
+      var bline = beforeBlocks[bi2].text.trim();
+      if (!bline) continue;
+      var bparts = bline.replace(/([.!?…])\s+/g, '$1\n').split('\n');
+      for (var bj = 0; bj < bparts.length; bj++) {
+        if (bparts[bj].trim().length > 10) count++;
+      }
+    }
+    ttsState.currentSentence = count;
+  } else {
+    // Fallback: search text
+    var cleanPara = paraText.replace(/\s+/g, ' ').substring(0, 40);
+    var found = false;
+    for (var bi3 = 0; bi3 < result.blocks.length; bi3++) {
+      if (result.blocks[bi3].text.replace(/\s+/g, ' ').indexOf(cleanPara) >= 0) {
+        targetBlockIdx = bi3;
+        found = true;
+        break;
+      }
+    }
+    if (found) {
+      var count2 = 0;
+      for (var bi4 = 0; bi4 < targetBlockIdx; bi4++) {
+        var bl2 = result.blocks[bi4].text.trim();
+        if (!bl2) continue;
+        var bp2 = bl2.replace(/([.!?…])\s+/g, '$1\n').split('\n');
+        for (var bk = 0; bk < bp2.length; bk++) {
+          if (bp2[bk].trim().length > 10) count2++;
+        }
+      }
+      ttsState.currentSentence = count2;
+    } else {
+      ttsState.currentSentence = 0;
+    }
   }
 
   ttsState.playing = true;
