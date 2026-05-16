@@ -45,15 +45,25 @@ function parseEpub(arrayBuffer) {
 
         // Parse TOC from NCX file (must complete before returning)
         epub.toc = [];
-        var ncxFile = z.file(epub._basePath + 'toc.ncx');
+        var ncxPath = findNcxPath(z, epub);
         var tocPromise = Promise.resolve();
-        if (ncxFile) {
-          tocPromise = ncxFile.async('string').then(function(ncx) {
-            var re = /<navPoint[^>]*>[\s\S]*?<navLabel>[\s\S]*?<text>([\s\S]*?)<\/text>[\s\S]*?<\/navLabel>[\s\S]*?<content[^>]*src="([^"]*)"[^>]*\/>[\s\S]*?<\/navPoint>/gi;
-            var m;
-            while ((m = re.exec(ncx))) {
-              epub.toc.push({ label: m[1].trim(), href: m[2] });
-            }
+        if (ncxPath) {
+          tocPromise = z.file(ncxPath).async('string').then(function(ncx) {
+            try {
+              var parser = new DOMParser();
+              var doc = parser.parseFromString(ncx, 'text/xml');
+              var points = doc.querySelectorAll('navPoint');
+              for (var i = 0; i < points.length; i++) {
+                var label = points[i].querySelector('navLabel text');
+                var content = points[i].querySelector('content');
+                if (label && content) {
+                  var src = content.getAttribute('src');
+                  if (src) {
+                    epub.toc.push({ label: label.textContent.trim(), href: src });
+                  }
+                }
+              }
+            } catch(e) {}
           }).catch(function() {});
         }
         return tocPromise.then(function() { return epub; });
@@ -196,9 +206,25 @@ function renderEpubTo(epub, container) {
           for (var mi = 0; mi < markers.length; mi++) {
             var f = markers[mi].getAttribute('data-file');
             for (var ti = 0; ti < epub.toc.length; ti++) {
-              if (epub.toc[ti].href === f) {
+              // Compare normalized paths (handle encoding differences)
+              if (normalizePath(epub.toc[ti].href) === normalizePath(f)) {
                 tocMap.push({ label: epub.toc[ti].label, page: pi });
               }
+            }
+          }
+        }
+      }
+      // If matching by file failed, try matching by label text in pages
+      if (tocMap.length === 0 && epub.toc && epub.toc.length > 0) {
+        var doneLabels = {};
+        for (var ti2 = 0; ti2 < epub.toc.length; ti2++) {
+          var searchLabel = epub.toc[ti2].label;
+          if (doneLabels[searchLabel]) continue;
+          doneLabels[searchLabel] = true;
+          for (var pi2 = 0; pi2 < pageEls.length; pi2++) {
+            if (pageEls[pi2].textContent.indexOf(searchLabel) >= 0) {
+              tocMap.push({ label: searchLabel, page: pi2 });
+              break;
             }
           }
         }
@@ -261,6 +287,20 @@ function buildPages(fullHtml, pageWidth, pageHeight) {
   return pages;
 }
 
+// Find NCX path from manifest or by searching
+function findNcxPath(zip, epub) {
+  // Check manifest for NCX media type
+  for (var id in epub._manifest) {
+    if (epub._manifest[id] === 'toc.ncx' || id === 'ncx') {
+      return resolveHref(epub._basePath, epub._manifest[id]);
+    }
+  }
+  // Fallback: try standard locations
+  if (zip.file(epub._basePath + 'toc.ncx')) return epub._basePath + 'toc.ncx';
+  if (zip.file('toc.ncx')) return 'toc.ncx';
+  return null;
+}
+
 function resolveHref(base, href) {
   var parts = base.split('/');
   parts.pop();
@@ -275,6 +315,12 @@ function extractTag(xml, tag) {
   var re = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>', 'i');
   var m = xml.match(re);
   return m ? m[1].replace(/<[^>]+>/g, '').trim() : null;
+}
+
+function normalizePath(p) {
+  if (!p) return '';
+  try { p = decodeURIComponent(p); } catch(e) {}
+  return p.replace(/^\.\//, '').replace(/\/+$/, '').toLowerCase();
 }
 
 function guessMimeType(path) {
