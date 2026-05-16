@@ -160,7 +160,7 @@ function renderEpubTo(epub, container) {
           'scroll-snap-align:start;scroll-snap-stop:always;' +
           'overflow-y:auto;overflow-x:hidden;' +
           '-webkit-overflow-scrolling:touch;' +
-          'padding:12px 16px;' +
+          'padding:20px 24px;' +
           'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;' +
           'font-size:18px;line-height:1.8;' +
           'color:#1a1a1a;background:#fff;' +
@@ -198,7 +198,7 @@ function buildPages(fullHtml, pageWidth, pageHeight) {
   }
 
   var pages = [];
-  var contentHeight = pageHeight - 20;
+  var contentHeight = pageHeight - 40;
   var tempPage = document.createElement('div');
   tempPage.style.cssText = 'width:' + pageWidth + 'px;height:auto;overflow:hidden;';
   measure.appendChild(tempPage);
