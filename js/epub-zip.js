@@ -113,26 +113,23 @@ function renderEpubTo(epub, container) {
         });
       }).join('\n<hr style="border:none;margin:20px 0;"/>');
 
-      // Render in iframe
-      var iframe = document.createElement('iframe');
-      iframe.style.cssText = 'width:100%;min-height:100%;border:none;background:#fff;';
-      iframe.sandbox = 'allow-scripts allow-same-origin';
+      // Render in a div directly (not iframe)
+      var wrapper = document.createElement('div');
+      wrapper.id = 'epub-content';
+      wrapper.style.cssText = 'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;font-size:18px;line-height:1.8;padding:16px 20px 40px;color:#1a1a1a !important;background:#fff;word-wrap:break-word;overflow-wrap:break-word;';
+
+      // Wrap in a style tag to override any EPUB CSS
+      fullHtml = '<style>body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;}img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}</style>' + fullHtml;
+
+      wrapper.innerHTML = fullHtml;
+
       container.innerHTML = '';
-      container.appendChild(iframe);
+      container.appendChild(wrapper);
 
-      var doc = iframe.contentDocument || iframe.contentWindow.document;
-      doc.open();
-      doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>' +
-        'body{font-family:Georgia,"Times New Roman","Noto Serif SC",serif;font-size:100%;line-height:1.8;padding:16px 20px;color:#1a1a1a;background:#fff;-webkit-text-size-adjust:100%;word-wrap:break-word;}' +
-        'img{max-width:100%;height:auto;}' +
-        'p{margin-bottom:0.8em;}' +
-        '</style></head><body>' + fullHtml + '</body></html>');
-      doc.close();
+      // Setup word-tap on the wrapper
+      setupWordTapOnDiv(wrapper);
 
-      // Setup word-tap on iframe
-      setupWordTap(iframe);
-
-      return iframe;
+      return wrapper;
     });
   });
 }
@@ -142,7 +139,7 @@ function resolveHref(base, href) {
   parts.pop();
   href.split('/').forEach(function(seg) {
     if (seg === '..') parts.pop();
-    else if (seg !== '.') parts.push(seg);
+    else if (seg !== '.' && seg !== '') parts.push(seg);
   });
   return parts.join('/');
 }
@@ -159,37 +156,53 @@ function guessMimeType(path) {
   return m[ext] || 'image/octet-stream';
 }
 
-function setupWordTap(iframe) {
-  try {
-    var doc = iframe.contentDocument || iframe.contentWindow.document;
-    if (!doc) return;
+function setupWordTapOnDiv(el) {
+  var sx = 0, sy = 0, st = 0, moved = false;
 
-    var script = doc.createElement('script');
-    script.textContent = [
-      '(function(){',
-      'var sx=0,sy=0,st=0,moved=false;',
-      'document.addEventListener("touchstart",function(e){',
-      'if(e.touches.length===1){sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now();moved=false;}',
-      '},{passive:true});',
-      'document.addEventListener("touchmove",function(e){',
-      'if(Math.abs(e.touches[0].clientX-sx)>8||Math.abs(e.touches[0].clientY-sy)>8)moved=true;',
-      '},{passive:true});',
-      'document.addEventListener("touchend",function(e){',
-      'if(moved||Date.now()-st>400)return;',
-      'var x=e.changedTouches[0].clientX,y=e.changedTouches[0].clientY,range;',
-      'if(document.caretRangeFromPoint)range=document.caretRangeFromPoint(x,y);',
-      'else if(document.caretPositionFromPoint){var p=document.caretPositionFromPoint(x,y);',
-      'if(p){range=document.createRange();range.setStart(p.offsetNode,p.offset);range.setEnd(p.offsetNode,p.offset);}}',
-      'if(!range||!range.startContainer)return;',
-      'var n=range.startContainer;if(n.nodeType!==3)return;',
-      'var t=n.textContent,o=range.startOffset,s=o,e2=o;',
-      'while(s>0&&/[a-zA-Z]/.test(t[s-1]))s--;',
-      'while(e2<t.length&&/[a-zA-Z]/.test(t[e2]))e2++;',
-      'var w=t.slice(s,e2);',
-      'if(w.length>1&&/^[a-zA-Z]+$/.test(w))window.parent.postMessage({type:"word-tap",word:w.toLowerCase()},"*");',
-      '});',
-      '})();'
-    ].join('\n');
-    doc.body.appendChild(script);
-  } catch(e) {}
+  el.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 1) {
+      sx = e.touches[0].clientX;
+      sy = e.touches[0].clientY;
+      st = Date.now();
+      moved = false;
+    }
+  }, { passive: true });
+
+  el.addEventListener('touchmove', function(e) {
+    if (Math.abs(e.touches[0].clientX - sx) > 8 ||
+        Math.abs(e.touches[0].clientY - sy) > 8) {
+      moved = true;
+    }
+  }, { passive: true });
+
+  el.addEventListener('touchend', function(e) {
+    if (moved || (Date.now() - st) > 400) return;
+    var x = e.changedTouches[0].clientX;
+    var y = e.changedTouches[0].clientY;
+    var range;
+
+    if (document.caretRangeFromPoint) {
+      range = document.caretRangeFromPoint(x, y);
+    } else if (document.caretPositionFromPoint) {
+      var pos = document.caretPositionFromPoint(x, y);
+      if (pos) {
+        range = document.createRange();
+        range.setStart(pos.offsetNode, pos.offset);
+        range.setEnd(pos.offsetNode, pos.offset);
+      }
+    }
+
+    if (!range || !range.startContainer) return;
+    var n = range.startContainer;
+    if (n.nodeType !== 3) return;
+
+    var t = n.textContent;
+    var o = range.startOffset, s2 = o, e2 = o;
+    while (s2 > 0 && /[a-zA-Z]/.test(t[s2 - 1])) s2--;
+    while (e2 < t.length && /[a-zA-Z]/.test(t[e2])) e2++;
+    var w = t.slice(s2, e2);
+    if (w.length > 1 && /^[a-zA-Z]+$/.test(w)) {
+      window.postMessage({ type: 'word-tap', word: w.toLowerCase() }, '*');
+    }
+  });
 }

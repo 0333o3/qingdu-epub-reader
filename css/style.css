@@ -247,12 +247,13 @@ body {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   position: relative;
-}
-.reader-content iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
   background: var(--surface);
+}
+#epub-content {
+  min-height: 100%;
+}
+#epub-content * {
+  max-width: 100% !important;
 }
 
 .reader-bottombar {

@@ -54,14 +54,9 @@ function updateProgress() {
 
 function changeFontSize(delta) {
   fontSize = Math.max(60, Math.min(200, fontSize + delta));
-  var iframe = document.querySelector('#reader-content iframe');
-  if (iframe) {
-    try {
-      var doc = iframe.contentDocument || iframe.contentWindow.document;
-      if (doc && doc.body) {
-        doc.body.style.fontSize = fontSize + '%';
-      }
-    } catch(e) {}
+  var el = document.getElementById('epub-content');
+  if (el) {
+    el.style.fontSize = fontSize + '%';
   }
 }
 
