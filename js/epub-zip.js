@@ -21,8 +21,7 @@ function parseEpub(arrayBuffer) {
         epub._manifest = {};
         var manMatch = opf.match(/<manifest[^>]*>([\s\S]*?)<\/manifest>/i);
         if (manMatch) {
-          // Handle both id-first and href-first order
-        var re = /<item\s+[^>]*?(?:id="([^"]*)"[^>]*?href="([^"]*)"|href="([^"]*)"[^>]*?id="([^"]*)")[^>]*?\/?>/gi;
+          var re = /<item\s+[^>]*?(?:id="([^"]*)"[^>]*?href="([^"]*)"|href="([^"]*)"[^>]*?id="([^"]*)")[^>]*?\/?>/gi;
           var item;
           while ((item = re.exec(manMatch[1]))) {
             var mid = item[1] || item[4];
@@ -43,7 +42,7 @@ function parseEpub(arrayBuffer) {
           }
         }
 
-        // Parse TOC from NCX file (must complete before returning)
+        // Parse TOC from NCX
         epub.toc = [];
         var ncxPath = findNcxPath(z, epub);
         var tocPromise = Promise.resolve();
@@ -52,7 +51,6 @@ function parseEpub(arrayBuffer) {
             try {
               var parser = new DOMParser();
               var doc = parser.parseFromString(ncx, 'text/xml');
-              // Use getElementsByTagName for namespace-agnostic matching
               var points = doc.getElementsByTagName('navPoint');
               for (var i = 0; i < points.length; i++) {
                 var labels = points[i].getElementsByTagName('navLabel');
@@ -83,7 +81,6 @@ function renderEpubTo(epub, container) {
   var z = epub._zip;
   var basePath = epub._basePath;
 
-  // Load all spine HTML files
   var loads = epub.spine.map(function(href) {
     var path = resolveHref(basePath, href);
     var file = z.file(path);
@@ -92,19 +89,15 @@ function renderEpubTo(epub, container) {
   });
 
   return Promise.all(loads).then(function(htmls) {
-    // Collect all image references (src and xlink:href)
+    // Collect all image references
     var allImages = {};
     htmls.forEach(function(html) {
       html.replace(/src="([^"]+)"/gi, function(m, src) {
-        if (!/^(https?:|data:)/i.test(src)) {
-          allImages[src] = true;
-        }
+        if (!/^(https?:|data:)/i.test(src)) allImages[src] = true;
         return m;
       });
       html.replace(/xlink:href="([^"]+)"/gi, function(m, href) {
-        if (!/^(https?:|data:)/i.test(href)) {
-          allImages[href] = true;
-        }
+        if (!/^(https?:|data:)/i.test(href)) allImages[href] = true;
         return m;
       });
     });
@@ -114,7 +107,6 @@ function renderEpubTo(epub, container) {
       var imgPath = resolveHref(basePath, src);
       var imgFile = z.file(imgPath);
       if (!imgFile) {
-        // Try resolving from each spine item's directory
         epub.spine.forEach(function(href) {
           if (!imgFile) {
             var itemDir = resolveHref(basePath, href).replace(/[^/]+$/, '');
@@ -135,17 +127,12 @@ function renderEpubTo(epub, container) {
     });
 
     return Promise.all(imgPromises).then(function(imgResults) {
-      // Build image map
       var imgMap = {};
-      imgResults.forEach(function(r) {
-        if (r) imgMap[r.src] = r.url;
-      });
+      imgResults.forEach(function(r) { if (r) imgMap[r.src] = r.url; });
 
-      // Replace image src and xlink:href with blob URLs
-      // Also add file markers for TOC mapping
+      // Wrap each spine file's content in a section div with its href as data-file
       var fullHtml = htmls.map(function(html, idx) {
         var href = epub.spine[idx] || '';
-        var marker = '<span class="epub-file-marker" data-file="' + href + '" style="display:none;"></span>';
         html = html.replace(/src="([^"]+)"/gi, function(m, src) {
           if (imgMap[src]) return 'src="' + imgMap[src] + '"';
           return m;
@@ -154,26 +141,22 @@ function renderEpubTo(epub, container) {
           if (imgMap[h]) return 'xlink:href="' + imgMap[h] + '"';
           return m;
         });
-        return marker + html;
-      }).join('\n<hr class="epub-chapter-break" style="border:none;margin:20px 0;"/>');
+        return '<div class="epub-section" data-file="' + href + '">' + html + '</div>';
+      }).join('');
 
-      // Render with pagination using native scroll-snap
+      fullHtml = '<style>' +
+        'body{margin:0;padding:0;}img{max-width:100%;height:auto;display:block;margin:8px auto;}' +
+        'body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a;font-family:Georgia,"Times New Roman","Noto Serif SC",serif;text-align:left;}' +
+        '</style>' + fullHtml;
+
       var pageWidth = container.clientWidth || window.innerWidth;
       var pageHeight = container.clientHeight || (window.innerHeight - 100);
-
       if (pageWidth <= 0) pageWidth = 320;
       if (pageHeight <= 0) pageHeight = 400;
 
-      var fullHtml = '<style>' +
-        'body{margin:0 !important;padding:0 !important;}' +
-        'img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}' +
-        'body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;text-align:left !important;}' +
-        '</style>' + fullHtml;
-
-      // Build pages using a measurement div
       var pages = buildPages(fullHtml, pageWidth, pageHeight);
 
-      // Create scrollable container with snap
+      // Create scrollable container
       var scroller = document.createElement('div');
       scroller.id = 'epub-scroller';
       scroller.style.cssText = 'display:flex;overflow-x:auto;overflow-y:hidden;' +
@@ -188,11 +171,9 @@ function renderEpubTo(epub, container) {
           'height:' + pageHeight + 'px;' +
           'scroll-snap-align:start;scroll-snap-stop:always;' +
           'overflow-y:auto;overflow-x:hidden;' +
-          '-webkit-overflow-scrolling:touch;' +
-          'padding:20px 24px;' +
+          '-webkit-overflow-scrolling:touch;padding:20px 24px;' +
           'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;' +
-          'font-size:18px;line-height:1.8;' +
-          'color:#1a1a1a;background:#fff;' +
+          'font-size:18px;line-height:1.8;color:#1a1a1a;background:#fff;' +
           'word-wrap:break-word;overflow-wrap:break-word;';
         page.innerHTML = pages[i];
         scroller.appendChild(page);
@@ -201,45 +182,10 @@ function renderEpubTo(epub, container) {
       container.innerHTML = '';
       container.appendChild(scroller);
 
-      // Build TOC → page mapping by searching for chapter titles in page text
-      var tocMap = [];
-      if (epub.toc && epub.toc.length > 0) {
-        var pageEls = scroller.querySelectorAll('.epub-page');
-        for (var ti = 0; ti < epub.toc.length; ti++) {
-          var label = epub.toc[ti].label;
-          // Skip empty, cover, and title-page TOC entries (they match too broadly)
-          var skipWords = ['cover', 'title page', 'titlepage', 'copyright'];
-          var labelLow = label.toLowerCase();
-          if (skipWords.indexOf(labelLow) >= 0) continue;
-
-          // Try exact label match first
-          var found = false;
-          for (var pi = 0; pi < pageEls.length; pi++) {
-            if (pageEls[pi].textContent.indexOf(label) >= 0) {
-              tocMap.push({ label: label, page: pi });
-              found = true;
-              break;
-            }
-          }
-          // If not found by label, try first 5 meaningful chars
-          if (!found) {
-            var short = label.replace(/[^a-zA-Z0-9一-鿿]/g, '').substring(0, 5);
-            if (short.length >= 3) {
-              for (var pi2 = 0; pi2 < pageEls.length; pi2++) {
-                if (pageEls[pi2].textContent.indexOf(short) >= 0) {
-                  tocMap.push({ label: label, page: pi2 });
-                  break;
-                }
-              }
-            }
-          }
-        }
-        // Sort by page number
-        tocMap.sort(function(a, b) { return a.page - b.page; });
-      }
+      // Build TOC → page mapping: find which page each TOC entry's file first appears on
+      var tocMap = buildTocMap(epub, scroller);
       window._epubTocMap = tocMap;
 
-      // Setup word-tap on each page
       setupWordTapOnDiv(scroller);
 
       return { container: scroller, pageWidth: pageWidth, pageHeight: pageHeight, totalPages: pages.length, tocMap: tocMap };
@@ -247,7 +193,68 @@ function renderEpubTo(epub, container) {
   });
 }
 
-// Split full HTML content into page-sized chunks
+// Build chapters by searching for file sections, then mapping to TOC
+function buildTocMap(epub, scroller) {
+  var toc = epub.toc;
+  if (!toc || toc.length === 0) return [];
+
+  // First pass: find which page each file starts on
+  var filePageMap = {};
+  var pages = scroller.querySelectorAll('.epub-page');
+  for (var pi = 0; pi < pages.length; pi++) {
+    var sections = pages[pi].querySelectorAll('.epub-section');
+    for (var si = 0; si < sections.length; si++) {
+      var f = sections[si].getAttribute('data-file');
+      if (f && !(f in filePageMap)) {
+        filePageMap[f] = pi;
+      }
+    }
+  }
+
+  // Map TOC entries to pages by matching file href
+  var tocMap = [];
+  for (var ti = 0; ti < toc.length; ti++) {
+    var targetHref = normalizePath(toc[ti].href);
+    var bestPage = -1;
+
+    // Try exact file match first
+    for (var filePath in filePageMap) {
+      if (normalizePath(filePath) === targetHref) {
+        bestPage = filePageMap[filePath];
+        break;
+      }
+    }
+
+    // If no file match, try partial match (file ends with the target)
+    if (bestPage < 0) {
+      for (var fp in filePageMap) {
+        if (normalizePath(fp).indexOf(targetHref) >= 0 || targetHref.indexOf(normalizePath(fp)) >= 0) {
+          bestPage = filePageMap[fp];
+          break;
+        }
+      }
+    }
+
+    // If still no match, search page text
+    if (bestPage < 0 && toc[ti].label.length > 3) {
+      var label = toc[ti].label;
+      for (var pi2 = 0; pi2 < pages.length; pi2++) {
+        if (pages[pi2].textContent.indexOf(label) >= 0) {
+          bestPage = pi2;
+          break;
+        }
+      }
+    }
+
+    if (bestPage >= 0) {
+      tocMap.push({ label: toc[ti].label, page: bestPage });
+    }
+  }
+
+  return tocMap;
+}
+
+// Split HTML content into page-sized chunks
 function buildPages(fullHtml, pageWidth, pageHeight) {
   var measure = document.createElement('div');
   measure.style.cssText = 'position:fixed;left:-9999px;top:0;' +
@@ -258,14 +265,11 @@ function buildPages(fullHtml, pageWidth, pageHeight) {
   measure.innerHTML = fullHtml;
   document.body.appendChild(measure);
 
-  // Collect all visible block-level elements at any depth
-  var blocks = measure.querySelectorAll('p, h1, h2, h3, h4, h5, h6, img, blockquote, li, hr, table, pre, div.calibre, div.calibre1, div.s, div.s1, div[style*="text-align"]');
-  if (blocks.length === 0) {
-    blocks = measure.querySelectorAll('div, p, span');
-  }
+  var contentHeight = pageHeight - 40;
+  var blocks = measure.querySelectorAll('p, h1, h2, h3, h4, h5, h6, img, blockquote, li, hr, table, pre, div.epub-section, div.calibre, div.calibre1, div.s, div.s1, div[style*="text-align"]');
+  if (blocks.length === 0) blocks = measure.querySelectorAll('div, p, span');
 
   var pages = [];
-  var contentHeight = pageHeight - 40;
   var tempPage = document.createElement('div');
   tempPage.style.cssText = 'width:' + pageWidth + 'px;height:auto;overflow:hidden;';
   measure.appendChild(tempPage);
@@ -276,34 +280,25 @@ function buildPages(fullHtml, pageWidth, pageHeight) {
 
     if (tempPage.scrollHeight > contentHeight) {
       tempPage.removeChild(clone);
-      if (tempPage.innerHTML.trim()) {
-        pages.push(tempPage.innerHTML);
-      }
+      if (tempPage.innerHTML.trim()) pages.push(tempPage.innerHTML);
       tempPage.innerHTML = '';
       tempPage.appendChild(clone);
     }
   }
-
-  if (tempPage.innerHTML.trim()) {
-    pages.push(tempPage.innerHTML);
-  }
-
+  if (tempPage.innerHTML.trim()) pages.push(tempPage.innerHTML);
   if (tempPage.parentNode) tempPage.parentNode.removeChild(tempPage);
   document.body.removeChild(measure);
-
   if (pages.length === 0) pages.push(fullHtml);
   return pages;
 }
 
-// Find NCX path from manifest or by searching
+// Find NCX path from manifest
 function findNcxPath(zip, epub) {
-  // Check manifest for NCX media type
   for (var id in epub._manifest) {
-    if (epub._manifest[id] === 'toc.ncx' || id === 'ncx') {
+    if (id === 'ncx' || epub._manifest[id] === 'toc.ncx') {
       return resolveHref(epub._basePath, epub._manifest[id]);
     }
   }
-  // Fallback: try standard locations
   if (zip.file(epub._basePath + 'toc.ncx')) return epub._basePath + 'toc.ncx';
   if (zip.file('toc.ncx')) return 'toc.ncx';
   return null;
@@ -342,43 +337,31 @@ function setupWordTapOnDiv(el) {
 
   el.addEventListener('touchstart', function(e) {
     if (e.touches.length === 1) {
-      sx = e.touches[0].clientX;
-      sy = e.touches[0].clientY;
-      st = Date.now();
-      moved = false;
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+      st = Date.now(); moved = false;
     }
   }, { passive: true });
 
   el.addEventListener('touchmove', function(e) {
     if (Math.abs(e.touches[0].clientX - sx) > 8 ||
-        Math.abs(e.touches[0].clientY - sy) > 8) {
-      moved = true;
-    }
+        Math.abs(e.touches[0].clientY - sy) > 8) moved = true;
   }, { passive: true });
 
   el.addEventListener('touchend', function(e) {
     if (moved || (Date.now() - st) > 400) return;
-    var x = e.changedTouches[0].clientX;
-    var y = e.changedTouches[0].clientY;
-    var range;
-
+    var x = e.changedTouches[0].clientX, y = e.changedTouches[0].clientY, range;
     if (document.caretRangeFromPoint) {
       range = document.caretRangeFromPoint(x, y);
     } else if (document.caretPositionFromPoint) {
       var pos = document.caretPositionFromPoint(x, y);
-      if (pos) {
-        range = document.createRange();
+      if (pos) { range = document.createRange();
         range.setStart(pos.offsetNode, pos.offset);
-        range.setEnd(pos.offsetNode, pos.offset);
-      }
+        range.setEnd(pos.offsetNode, pos.offset); }
     }
-
     if (!range || !range.startContainer) return;
     var n = range.startContainer;
     if (n.nodeType !== 3) return;
-
-    var t = n.textContent;
-    var o = range.startOffset, s2 = o, e2 = o;
+    var t = n.textContent, o = range.startOffset, s2 = o, e2 = o;
     while (s2 > 0 && /[a-zA-Z]/.test(t[s2 - 1])) s2--;
     while (e2 < t.length && /[a-zA-Z]/.test(t[e2])) e2++;
     var w = t.slice(s2, e2);
