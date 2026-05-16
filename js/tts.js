@@ -306,50 +306,84 @@ function highlightSentence(text) {
   var body = getEpubBody();
   if (!body) return;
 
-  // Find the first 20 chars of this sentence in any text node
-  var search = text.replace(/\s+/g, ' ').substring(0, 20).trim();
-  if (!search) return;
+  // Clean the search text: get first meaningful word(s)
+  var cleanSentence = text.replace(/\s+/g, ' ').trim();
+  // Use a short but unique prefix (first 10 chars)
+  var search = cleanSentence.substring(0, 10);
+  if (search.length < 3) return;
 
-  // Walk text nodes looking for a match
+  // First pass: look for match in text nodes (works for non-fragmented text)
   var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
   var node;
   while ((node = walker.nextNode())) {
-    // Normalize whitespace for matching
     var raw = node.textContent;
     var norm = raw.replace(/\s+/g, ' ');
     var idx = norm.indexOf(search);
-    if (idx < 0) continue;
-
-    // Convert normalized index to raw index
-    var rawIdx = 0, normPos = 0;
-    while (normPos < idx && rawIdx < raw.length) {
-      if (/\s/.test(raw[rawIdx])) {
-        while (rawIdx < raw.length && /\s/.test(raw[rawIdx])) rawIdx++;
-        normPos++;
-      } else {
-        rawIdx++;
-        normPos++;
-      }
+    if (idx >= 0) {
+      applyHighlight(node, raw, idx, norm, search);
+      return;
     }
-
-    // Highlight full remaining text in this node
-    var before = raw.substring(0, rawIdx);
-    var hl = raw.substring(rawIdx);
-    var parent = node.parentNode;
-    if (!parent) break;
-
-    var hlNode = document.createElement('span');
-    hlNode.className = 'tts-highlight';
-    hlNode.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
-    hlNode.textContent = hl;
-    parent.replaceChild(hlNode, node);
-    if (before) {
-      parent.insertBefore(document.createTextNode(before), hlNode);
-    }
-
-    navigateToHighlight(hlNode);
-    break;
   }
+
+  // Second pass: search in parent elements' textContent (handles fragmented text)
+  var blockWalker = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT, null, false);
+  var el;
+  while ((el = blockWalker.nextNode())) {
+    var tag = el.tagName;
+    if (tag !== 'P' && tag !== 'H1' && tag !== 'H2' && tag !== 'H3' && tag !== 'H4' &&
+        tag !== 'H5' && tag !== 'H6' && tag !== 'LI' && tag !== 'TD' && tag !== 'TH' &&
+        tag !== 'DIV' && tag !== 'BLOCKQUOTE') continue;
+
+    var elText = el.textContent.replace(/\s+/g, ' ');
+    var elIdx = elText.indexOf(search);
+    if (elIdx < 0) continue;
+
+    // Found the block containing the sentence. Find which text node has the match position.
+    var charCount = 0;
+    var tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+    var tn;
+    while ((tn = tw.nextNode())) {
+      var tnNorm = tn.textContent.replace(/\s+/g, ' ');
+      var tnLen = tnNorm.length;
+      if (charCount + tnLen > elIdx) {
+        // This text node contains the match
+        var localNormIdx = elIdx - charCount;
+        // Convert normalized index to raw index
+        var raw2 = tn.textContent;
+        var rawIdx2 = 0, normPos2 = 0;
+        while (normPos2 < localNormIdx && rawIdx2 < raw2.length) {
+          if (/\s/.test(raw2[rawIdx2])) {
+            while (rawIdx2 < raw2.length && /\s/.test(raw2[rawIdx2])) rawIdx2++;
+            normPos2++;
+          } else {
+            rawIdx2++;
+            normPos2++;
+          }
+        }
+        applyHighlight(tn, raw2, rawIdx2, tnNorm, search);
+        return;
+      }
+      charCount += tnLen;
+    }
+  }
+}
+
+function applyHighlight(tn, raw, rawIdx, norm, search) {
+  var before = raw.substring(0, rawIdx);
+  var hl = raw.substring(rawIdx);
+  var parent = tn.parentNode;
+  if (!parent) return;
+
+  var hlNode = document.createElement('span');
+  hlNode.className = 'tts-highlight';
+  hlNode.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
+  hlNode.textContent = hl;
+  parent.replaceChild(hlNode, tn);
+  if (before) {
+    parent.insertBefore(document.createTextNode(before), hlNode);
+  }
+
+  navigateToHighlight(hlNode);
 }
 
 function navigateToHighlight(el) {
