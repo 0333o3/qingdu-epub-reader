@@ -127,41 +127,98 @@ function renderEpubTo(epub, container) {
         return html;
       }).join('\n<hr style="border:none;margin:20px 0;"/>');
 
-      // Render in a paginated layout using CSS columns
-      var pageContainer = document.createElement('div');
-      pageContainer.id = 'epub-page-container';
-      pageContainer.style.cssText = 'overflow:hidden;height:100%;position:relative;background:#fff;';
-
+      // Render with pagination using native scroll-snap
       var pageWidth = container.clientWidth || window.innerWidth;
       var pageHeight = container.clientHeight || (window.innerHeight - 100);
 
-      var columns = document.createElement('div');
-      columns.id = 'epub-columns';
-      columns.style.cssText = 'column-width:' + pageWidth + 'px;' +
-        'column-gap:0;' +
-        'height:' + pageHeight + 'px;' +
-        'column-fill:auto;' +
-        'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;' +
-        'font-size:18px;line-height:1.8;padding:0;' +
-        'color:#1a1a1a !important;background:#fff;' +
-        'word-wrap:break-word;overflow-wrap:break-word;' +
-        'transition:transform 0.3s ease;' +
-        'will-change:transform;';
+      if (pageWidth <= 0) pageWidth = 320;
+      if (pageHeight <= 0) pageHeight = 400;
 
-      // Wrap in a style tag to override any EPUB CSS
-      fullHtml = '<style>body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;text-align:left !important;}p{text-indent:2em !important;margin-bottom:0.6em !important;}img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}body{padding:16px 20px 40px !important;}</style>' + fullHtml;
+      var fullHtml = '<style>body,div,p,span,h1,h2,h3,h4,h5,h6,li,td,th,blockquote{color:#1a1a1a !important;font-family:Georgia,"Times New Roman","Noto Serif SC",serif !important;text-align:left !important;}p{text-indent:2em !important;margin-bottom:0.6em !important;}img{max-width:100% !important;height:auto !important;display:block;margin:8px auto;}body{padding:16px 20px 40px !important;margin:0 !important;}</style>' + fullHtml;
 
-      columns.innerHTML = fullHtml;
-      pageContainer.appendChild(columns);
+      // Build pages using a measurement div
+      var pages = buildPages(fullHtml, pageWidth, pageHeight);
+
+      // Create scrollable container with snap
+      var scroller = document.createElement('div');
+      scroller.id = 'epub-scroller';
+      scroller.style.cssText = 'display:flex;overflow-x:auto;overflow-y:hidden;' +
+        'scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;' +
+        'height:100%;width:100%;background:#fff;';
+
+      for (var i = 0; i < pages.length; i++) {
+        var page = document.createElement('div');
+        page.className = 'epub-page';
+        page.style.cssText = 'min-width:' + pageWidth + 'px;max-width:' + pageWidth + 'px;' +
+          'height:' + pageHeight + 'px;' +
+          'scroll-snap-align:start;' +
+          'overflow-y:auto;overflow-x:hidden;' +
+          '-webkit-overflow-scrolling:touch;' +
+          'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;' +
+          'font-size:18px;line-height:1.8;' +
+          'color:#1a1a1a;background:#fff;' +
+          'word-wrap:break-word;overflow-wrap:break-word;';
+        page.innerHTML = pages[i];
+        scroller.appendChild(page);
+      }
+
       container.innerHTML = '';
-      container.appendChild(pageContainer);
+      container.appendChild(scroller);
 
-      // Setup word-tap on the columns div
-      setupWordTapOnDiv(columns);
+      // Setup word-tap on each page
+      setupWordTapOnDiv(scroller);
 
-      return { container: pageContainer, columns: columns, pageWidth: pageWidth };
+      return { container: scroller, pageWidth: pageWidth, pageHeight: pageHeight, totalPages: pages.length };
     });
   });
+}
+
+// Split full HTML content into page-sized chunks
+function buildPages(fullHtml, pageWidth, pageHeight) {
+  var measure = document.createElement('div');
+  measure.style.cssText = 'position:fixed;left:-9999px;top:0;' +
+    'width:' + pageWidth + 'px;height:auto;overflow:hidden;' +
+    'font-family:Georgia,"Times New Roman","Noto Serif SC",serif;' +
+    'font-size:18px;line-height:1.8;color:#1a1a1a;' +
+    'word-wrap:break-word;overflow-wrap:break-word;';
+  measure.innerHTML = fullHtml;
+  document.body.appendChild(measure);
+
+  // Collect all visible block-level elements at any depth
+  var blocks = measure.querySelectorAll('p, h1, h2, h3, h4, h5, h6, img, blockquote, li, hr, table, pre, div.calibre, div.calibre1, div.s, div.s1, div[style*="text-align"]');
+  if (blocks.length === 0) {
+    blocks = measure.querySelectorAll('div, p, span');
+  }
+
+  var pages = [];
+  var contentHeight = pageHeight - 20;
+  var tempPage = document.createElement('div');
+  tempPage.style.cssText = 'width:' + pageWidth + 'px;height:auto;overflow:hidden;';
+  measure.appendChild(tempPage);
+
+  for (var i = 0; i < blocks.length; i++) {
+    var clone = blocks[i].cloneNode(true);
+    tempPage.appendChild(clone);
+
+    if (tempPage.scrollHeight > contentHeight) {
+      tempPage.removeChild(clone);
+      if (tempPage.innerHTML.trim()) {
+        pages.push(tempPage.innerHTML);
+      }
+      tempPage.innerHTML = '';
+      tempPage.appendChild(clone);
+    }
+  }
+
+  if (tempPage.innerHTML.trim()) {
+    pages.push(tempPage.innerHTML);
+  }
+
+  if (tempPage.parentNode) tempPage.parentNode.removeChild(tempPage);
+  document.body.removeChild(measure);
+
+  if (pages.length === 0) pages.push(fullHtml);
+  return pages;
 }
 
 function resolveHref(base, href) {

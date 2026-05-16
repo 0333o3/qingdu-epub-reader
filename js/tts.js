@@ -52,7 +52,14 @@ function getEnglishVoices() {
 }
 
 function getEpubBody() {
-  return document.getElementById('epub-columns') || document.getElementById('epub-content') || document.body;
+  // Get all page divs' content
+  var scroller = document.getElementById('epub-scroller');
+  if (scroller) {
+    // Combine text from all pages
+    var pages = scroller.querySelectorAll('.epub-page');
+    if (pages.length > 0) return scroller;
+  }
+  return document.getElementById('epub-content') || document.body;
 }
 
 function extractSentences() {
@@ -224,23 +231,24 @@ function highlightSentence(text) {
 }
 
 function navigateToHighlight(el) {
-  if (typeof pageWidth === 'undefined' || !pageWidth) return;
-  var columns = document.getElementById('epub-columns');
-  if (!columns) return;
+  var scroller = document.getElementById('epub-scroller');
+  if (!scroller || typeof pageWidth === 'undefined' || !pageWidth) return;
 
-  var rect = el.getBoundingClientRect();
-  var colsRect = columns.getBoundingClientRect();
-  // el's position relative to the columns div
-  var elXInCols = rect.left - colsRect.left + columns.offsetLeft;
+  // Find which page contains this element
+  var page = el.closest('.epub-page');
+  if (!page) return;
 
-  // Determine which page/column this element is in
-  var targetPage = Math.floor(elXInCols / pageWidth);
+  // Get all pages and find the index
+  var pages = scroller.querySelectorAll('.epub-page');
+  var targetPage = 0;
+  for (var i = 0; i < pages.length; i++) {
+    if (pages[i] === page) { targetPage = i; break; }
+  }
 
-  // Navigate if needed
-  if (typeof currentPage !== 'undefined' && targetPage !== currentPage) {
+  // Scroll to the target page
+  if (targetPage !== currentPage) {
     currentPage = targetPage;
-    columns.style.transition = 'transform 0.3s ease';
-    columns.style.transform = 'translateX(-' + (targetPage * pageWidth) + 'px)';
+    scroller.scrollTo({ left: targetPage * pageWidth, behavior: 'smooth' });
     updatePageCount();
   }
 }
