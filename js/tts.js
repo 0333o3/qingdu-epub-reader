@@ -86,7 +86,21 @@ function extractSentences() {
   }
 
   var fullText = textParts.join(' ');
-  var sentences = fullText.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
+  // Split on newlines first, then on sentence punctuation within each line
+  var lines = fullText.split('\n');
+  var sentences = [];
+  for (var li = 0; li < lines.length; li++) {
+    var line = lines[li].trim();
+    if (!line) continue;
+    var parts = line.match(/[^.!?…]+[.!?…]*/g);
+    if (parts) {
+      for (var pi = 0; pi < parts.length; pi++) {
+        sentences.push(parts[pi].trim());
+      }
+    } else {
+      sentences.push(line);
+    }
+  }
   return sentences.filter(function(s) { return s.trim().length > 10; });
 }
 
@@ -150,9 +164,22 @@ function startTTSFromParagraph(paraText, paraEl) {
 
   var fullText = textParts.join(' ');
 
-  ttsState.sentences = [];
-  var sents = fullText.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
-  ttsState.sentences = sents.filter(function(s) { return s.trim().length > 10; });
+  // Split on newlines first, then on sentence punctuation within each line
+  var lines = fullText.split('\n');
+  var allSents = [];
+  for (var li = 0; li < lines.length; li++) {
+    var line = lines[li].trim();
+    if (!line) continue;
+    var parts = line.match(/[^.!?…]+[.!?…]*/g);
+    if (parts) {
+      for (var pi = 0; pi < parts.length; pi++) {
+        allSents.push(parts[pi].trim());
+      }
+    } else {
+      allSents.push(line);
+    }
+  }
+  ttsState.sentences = allSents.filter(function(s) { return s.trim().length > 10; });
 
   if (ttsState.sentences.length === 0) {
     showToast('没有可朗读的文本');
@@ -160,11 +187,23 @@ function startTTSFromParagraph(paraText, paraEl) {
   }
 
   if (paraStartIdx >= 0) {
-    // Find which sentence this position falls in, filtering short ones to match ttsState.sentences
+    // Count sentences before position using same newline-then-punctuation logic
     var before = fullText.substring(0, paraStartIdx);
-    var allBefore = before.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
-    var sentsBefore = allBefore.filter(function(s) { return s.trim().length > 10; });
-    ttsState.currentSentence = Math.max(0, sentsBefore.length);
+    var beforeLines = before.split('\n');
+    var count = 0;
+    for (var bi = 0; bi < beforeLines.length; bi++) {
+      var bl = beforeLines[bi].trim();
+      if (!bl) continue;
+      var bp = bl.match(/[^.!?…]+[.!?…]*/g);
+      if (bp) {
+        for (var bj = 0; bj < bp.length; bj++) {
+          if (bp[bj].trim().length > 10) count++;
+        }
+      } else if (bl.length > 10) {
+        count++;
+      }
+    }
+    ttsState.currentSentence = Math.max(0, count);
   } else {
     ttsState.currentSentence = 0;
   }
@@ -259,46 +298,64 @@ function highlightSentence(text) {
   var body = getEpubBody();
   if (!body) return;
 
-  // Try to find the sentence text in text nodes
-  var prefix = text.substring(0, 20).replace(/\s+/g, ' ').trim();
+  // Clean the search text
+  var search = text.replace(/\s+/g, ' ').trim();
+  var prefix = search.substring(0, 20);
   if (prefix.length < 3) return;
 
+  // Find the text node containing the prefix
   var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
   var node;
+  var foundNode = null, foundIdx = -1;
+
   while ((node = walker.nextNode())) {
-    var idx = node.textContent.indexOf(prefix);
+    var idx = node.textContent.replace(/\s+/g, ' ').indexOf(prefix);
     if (idx >= 0) {
-      var range = document.createRange();
-      // Only highlight what fits in this text node
-      var endIdx = Math.min(idx + text.length, node.textContent.length);
-      range.setStart(node, idx);
-      range.setEnd(node, endIdx);
-      var span = document.createElement('span');
-      span.className = 'tts-highlight';
-      span.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
-      try {
-        range.surroundContents(span);
-        navigateToHighlight(span);
-      } catch(e) {}
+      // Convert normalized-space index back to real index
+      var realIdx = 0;
+      var normPos = 0;
+      var raw = node.textContent;
+      while (normPos < idx && realIdx < raw.length) {
+        if (/\s/.test(raw[realIdx])) {
+          while (realIdx < raw.length && /\s/.test(raw[realIdx])) realIdx++;
+          normPos++;
+        } else {
+          realIdx++;
+          normPos++;
+        }
+      }
+      foundNode = node;
+      foundIdx = realIdx;
       break;
     }
   }
 
-  // Also search for shorter prefix if not found
-  if (!body.querySelector('.tts-highlight')) {
-    var short = prefix.substring(0, 10);
-    var w2 = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
-    while ((node = w2.nextNode())) {
-      var i2 = node.textContent.indexOf(short);
-      if (i2 >= 0) {
-        var r2 = document.createRange();
-        r2.setStart(node, i2);
-        r2.setEnd(node, Math.min(i2 + 20, node.textContent.length));
-        var s2 = document.createElement('span');
-        s2.className = 'tts-highlight';
-        s2.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
-        try { r2.surroundContents(s2); navigateToHighlight(s2); } catch(e) {}
-        break;
+  if (foundNode && foundIdx >= 0) {
+    var range = document.createRange();
+    var endIdx = Math.min(foundIdx + 40, foundNode.textContent.length);
+    range.setStart(foundNode, foundIdx);
+    range.setEnd(foundNode, endIdx);
+    var span = document.createElement('span');
+    span.className = 'tts-highlight';
+    span.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
+    try {
+      range.surroundContents(span);
+      navigateToHighlight(span);
+    } catch(e) {
+      // Fallback: just wrap the text node content
+      var parent = foundNode.parentNode;
+      if (parent) {
+        var before = foundNode.textContent.substring(0, foundIdx);
+        var hl = foundNode.textContent.substring(foundIdx, endIdx);
+        var after = foundNode.textContent.substring(endIdx);
+        parent.replaceChild(document.createTextNode(before), foundNode);
+        var hlSpan = document.createElement('span');
+        hlSpan.className = 'tts-highlight';
+        hlSpan.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
+        hlSpan.textContent = hl;
+        parent.insertBefore(hlSpan, foundNode.nextSibling);
+        parent.insertBefore(document.createTextNode(after), hlSpan.nextSibling);
+        navigateToHighlight(hlSpan);
       }
     }
   }
