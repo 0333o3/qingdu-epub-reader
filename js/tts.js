@@ -99,36 +99,37 @@ function startTTSFromParagraph(paraText, paraEl) {
     return;
   }
 
-  // Build full text and find paragraph position by indexOf
+  // Build full text from all text nodes
   var body = getEpubBody();
-  var textParts = [];
+  var allNodes = [];
   var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
   var node;
   while ((node = walker.nextNode())) {
-    var t = node.textContent.trim();
-    if (t) textParts.push(t);
+    var t = node.textContent;
+    if (t.trim()) allNodes.push(t);
   }
-  var fullText = textParts.join(' ');
+  var fullText = allNodes.join(' ');
 
-  // Find paragraph in full text using first meaningful words
-  var searchText = paraText.replace(/\s+/g, ' ').substring(0, 50).trim();
-  var pos = fullText.indexOf(searchText);
+  // Try progressively shorter search strings
+  var search = paraText.replace(/\s+/g, ' ').substring(0, 60).trim();
+  var pos = fullText.indexOf(search);
   if (pos < 0) {
-    // Try shorter match
-    searchText = paraText.replace(/\s+/g, ' ').substring(0, 25).trim();
-    pos = fullText.indexOf(searchText);
+    search = paraText.replace(/\s+/g, ' ').substring(0, 30).trim();
+    pos = fullText.indexOf(search);
   }
   if (pos < 0) {
-    // Try even shorter
-    searchText = paraText.replace(/[^a-zA-Z0-9 ]/g, '').substring(0, 20).trim();
-    pos = fullText.indexOf(searchText);
+    // Last resort: find by unique words
+    var words = paraText.replace(/[^a-zA-Z]/g, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 5);
+    if (words.length >= 3) {
+      var phrase = words.join(' ');
+      pos = fullText.indexOf(phrase);
+    }
   }
 
   if (pos >= 0) {
-    // Count sentences before this position
-    var beforeText = fullText.substring(0, pos);
-    var sentencesBefore = beforeText.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
-    ttsState.currentSentence = sentencesBefore.length;
+    var before = fullText.substring(0, pos);
+    var sents = before.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
+    ttsState.currentSentence = Math.max(0, sents.length - 1);
   } else {
     ttsState.currentSentence = 0;
   }
@@ -136,7 +137,7 @@ function startTTSFromParagraph(paraText, paraEl) {
   ttsState.playing = true;
   ttsState.paused = false;
   updateTTSButton();
-  showToast('从选中段落开始朗读');
+  showToast('从第' + (ttsState.currentSentence + 1) + '句开始');
   speakCurrent();
 }
 
