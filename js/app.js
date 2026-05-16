@@ -206,7 +206,8 @@ document.getElementById('file-upload').addEventListener('change', async (e) => {
       showToast('添加成功');
     } catch (err) {
       console.error('Process error:', err);
-      showToast('保存失败，请检查手机存储空间');
+      const msg = err && err.message ? err.message : String(err);
+      showToast('失败: ' + msg);
     }
   }
 
