@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#fafafa">
+  <title>轻读</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- ===== Library Screen ===== -->
+  <div id="screen-library" class="screen active">
+    <header class="header">
+      <h1 class="logo">轻读</h1>
+      <button id="btn-nav-vocab" class="btn-icon" aria-label="词汇本">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      </button>
+    </header>
+    <div class="library-controls">
+      <label for="file-upload" class="btn-upload">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        添加书籍
+      </label>
+      <input type="file" id="file-upload" accept=".epub" hidden>
+    </div>
+    <div id="book-grid" class="book-grid">
+      <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <p>还没有书籍</p>
+        <p>点击上方按钮添加 EPUB 书籍</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Reader Screen ===== -->
+  <div id="screen-reader" class="screen">
+    <div id="reader-topbar" class="reader-topbar">
+      <button id="btn-reader-back" class="btn-icon" aria-label="返回">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span id="reader-title" class="reader-title"></span>
+      <div class="reader-topbar-actions">
+        <button id="btn-tts-toggle" class="btn-icon" aria-label="朗读">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="reader-content" class="reader-content"></div>
+    <div id="reader-bottombar" class="reader-bottombar">
+      <button id="btn-font-down" class="btn-icon" aria-label="缩小字体">A-</button>
+      <span id="reader-progress">0%</span>
+      <button id="btn-font-up" class="btn-icon" aria-label="放大字体">A+</button>
+    </div>
+    <!-- TTS controls overlay -->
+    <div id="tts-controls" class="tts-controls hidden">
+      <div class="tts-row">
+        <button id="btn-tts-prev" class="btn-icon" aria-label="上一句">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+        </button>
+        <button id="btn-tts-play" class="btn-tts-play" aria-label="播放">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <button id="btn-tts-next" class="btn-icon" aria-label="下一句">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+        </button>
+        <button id="btn-tts-stop" class="btn-icon btn-tts-stop" aria-label="停止">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+        </button>
+      </div>
+      <div class="tts-row tts-settings">
+        <select id="tts-voice" class="tts-select"></select>
+        <label class="tts-speed">
+          <span>语速</span>
+          <input type="range" id="tts-rate" min="0.5" max="2" step="0.1" value="0.9">
+          <span id="tts-rate-label">0.9x</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Vocabulary Screen ===== -->
+  <div id="screen-vocabulary" class="screen">
+    <header class="header">
+      <button id="btn-vocab-back" class="btn-icon" aria-label="返回">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <h2>生词本</h2>
+      <button id="btn-vocab-export" class="btn-icon" aria-label="导出">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+    </header>
+    <div class="vocab-search">
+      <input type="text" id="vocab-search-input" placeholder="搜索单词..." class="search-input">
+    </div>
+    <div id="vocab-list" class="vocab-list">
+      <div class="empty-state">
+        <p>还没有收藏的单词</p>
+        <p>阅读时点击英文单词即可添加</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Dictionary Popover ===== -->
+  <div id="popover-dictionary" class="popover hidden">
+    <div class="popover-header">
+      <span id="popover-word" class="popover-word"></span>
+      <button id="popover-pronounce" class="btn-icon btn-pronounce" aria-label="发音">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      </button>
+      <button id="popover-close" class="btn-icon" aria-label="关闭">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="popover-phonetic" class="popover-phonetic"></div>
+    <div id="popover-definitions" class="popover-definitions"></div>
+    <button id="popover-save" class="btn-save-word">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      加入生词本
+    </button>
+  </div>
+
+  <!-- ===== Overlay ===== -->
+  <div id="overlay" class="overlay hidden"></div>
+
+  <!-- ===== Toast ===== -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/dictionary.js"></script>
+  <script src="js/vocabulary.js"></script>
+  <script src="js/tts.js"></script>
+  <script src="js/reader.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
