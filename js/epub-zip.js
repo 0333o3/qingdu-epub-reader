@@ -377,21 +377,38 @@ function guessMimeType(path) {
 }
 
 function setupWordTapOnDiv(el) {
-  var sx = 0, sy = 0, st = 0, moved = false;
+  var sx = 0, sy = 0, st = 0, moved = false, longPressTimer = null;
 
   el.addEventListener('touchstart', function(e) {
     if (e.touches.length === 1) {
       sx = e.touches[0].clientX; sy = e.touches[0].clientY;
       st = Date.now(); moved = false;
+      // Long press: 600ms hold → TTS from paragraph
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(function() {
+        if (!moved) {
+          var el2 = document.elementFromPoint(sx, sy);
+          var p = el2 ? (el2.closest ? el2.closest('p') : null) : null;
+          if (!p) { p = findClosestP(el2); }
+          if (p && p.textContent.trim().length > 20) {
+            startTTSFromParagraph(p.textContent.trim(), p);
+          }
+        }
+      }, 600);
     }
   }, { passive: true });
 
   el.addEventListener('touchmove', function(e) {
     if (Math.abs(e.touches[0].clientX - sx) > 8 ||
-        Math.abs(e.touches[0].clientY - sy) > 8) moved = true;
+        Math.abs(e.touches[0].clientY - sy) > 8) {
+      moved = true;
+      clearTimeout(longPressTimer);
+    }
   }, { passive: true });
 
   el.addEventListener('touchend', function(e) {
+    clearTimeout(longPressTimer);
+    // Short tap: word lookup only
     if (moved || (Date.now() - st) > 400) return;
     var x = e.changedTouches[0].clientX, y = e.changedTouches[0].clientY, range;
     if (document.caretRangeFromPoint) {
@@ -413,4 +430,12 @@ function setupWordTapOnDiv(el) {
       window.postMessage({ type: 'word-tap', word: w.toLowerCase() }, '*');
     }
   });
+}
+
+function findClosestP(el) {
+  while (el) {
+    if (el.tagName === 'P') return el;
+    el = el.parentElement;
+  }
+  return null;
 }
