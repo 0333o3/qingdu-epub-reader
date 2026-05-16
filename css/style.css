@@ -265,6 +265,10 @@ body {
 .epub-page * {
   max-width: 100% !important;
 }
+.epub-page p {
+  text-indent: 2em !important;
+  margin-bottom: 0.6em !important;
+}
 
 .reader-bottombar {
   display: flex;
