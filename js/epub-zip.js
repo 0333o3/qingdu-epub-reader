@@ -52,14 +52,18 @@ function parseEpub(arrayBuffer) {
             try {
               var parser = new DOMParser();
               var doc = parser.parseFromString(ncx, 'text/xml');
-              var points = doc.querySelectorAll('navPoint');
+              // Use getElementsByTagName for namespace-agnostic matching
+              var points = doc.getElementsByTagName('navPoint');
               for (var i = 0; i < points.length; i++) {
-                var label = points[i].querySelector('navLabel text');
-                var content = points[i].querySelector('content');
-                if (label && content) {
-                  var src = content.getAttribute('src');
-                  if (src) {
-                    epub.toc.push({ label: label.textContent.trim(), href: src });
+                var labels = points[i].getElementsByTagName('navLabel');
+                var contents = points[i].getElementsByTagName('content');
+                if (labels.length > 0 && contents.length > 0) {
+                  var texts = labels[0].getElementsByTagName('text');
+                  if (texts.length > 0) {
+                    var src = contents[0].getAttribute('src');
+                    if (src) {
+                      epub.toc.push({ label: texts[0].textContent.trim(), href: src });
+                    }
                   }
                 }
               }
