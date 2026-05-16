@@ -98,15 +98,54 @@ function startTTSFromParagraph(paraText, paraEl) {
     showToast('没有可朗读的文本');
     return;
   }
-  var paraStart = paraText.substring(0, 40).replace(/[^a-zA-Z0-9]/g, ' ').trim();
-  var bestIdx = 0;
-  for (var i = 0; i < ttsState.sentences.length; i++) {
-    var sStart = ttsState.sentences[i].substring(0, 40).replace(/[^a-zA-Z0-9]/g, ' ').trim();
-    if (sStart.indexOf(paraStart) === 0 || paraStart.indexOf(sStart) === 0) {
-      bestIdx = i; break;
+
+  // Find paragraph position in full text
+  var body = getEpubBody();
+  var textParts = [];
+  var paraStartIdx = -1;
+  var charCount = 0;
+  var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+  var node;
+
+  while ((node = walker.nextNode())) {
+    var t = node.textContent;
+    // Check if this node is inside the target paragraph
+    if (paraEl && (paraEl === node.parentElement || node.parentElement.closest('p') === paraEl)) {
+      if (paraStartIdx < 0) {
+        paraStartIdx = charCount + t.indexOf(paraText.substring(0, 20));
+      }
     }
+    charCount += t.length;
+    if (t.trim()) textParts.push(t);
   }
-  ttsState.currentSentence = bestIdx;
+
+  var fullText = textParts.join(' ');
+
+  // Find which sentence contains the paragraph start
+  if (paraStartIdx < 0 && paraEl) {
+    // Fallback: find paragraph text in full text
+    var cleanPara = paraText.substring(0, 30).replace(/\s+/g, ' ').trim();
+    paraStartIdx = fullText.indexOf(cleanPara);
+  }
+
+  if (paraStartIdx >= 0) {
+    // Count sentences before this position
+    var sentenceBreaks = [];
+    var re = /[^.!?…\n]+[.!?…]*[\n"」』]?/g;
+    var m;
+    while ((m = re.exec(fullText))) {
+      sentenceBreaks.push(m.index);
+    }
+    for (var i = sentenceBreaks.length - 1; i >= 0; i--) {
+      if (sentenceBreaks[i] <= paraStartIdx) {
+        ttsState.currentSentence = i;
+        break;
+      }
+    }
+  } else {
+    ttsState.currentSentence = 0;
+  }
+
   ttsState.playing = true;
   ttsState.paused = false;
   updateTTSButton();
