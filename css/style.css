@@ -243,16 +243,20 @@ body {
 
 .reader-content {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   position: relative;
   background: var(--surface);
+  touch-action: pan-y;
 }
-#epub-content {
-  min-height: 100%;
+#epub-page-container {
+  width: 100%;
+  height: 100%;
 }
-#epub-content * {
+#epub-columns {
+  -webkit-user-select: none;
+  user-select: none;
+}
+#epub-columns * {
   max-width: 100% !important;
 }
 

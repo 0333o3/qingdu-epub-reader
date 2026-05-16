@@ -1,4 +1,4 @@
-let ttsState = {
+var ttsState = {
   playing: false,
   paused: false,
   currentSentence: 0,
@@ -8,24 +8,23 @@ let ttsState = {
 };
 
 function initTTS() {
-  // Load voices (they load async in some browsers)
-  speechSynthesis.onvoiceschanged = () => populateVoices();
+  speechSynthesis.onvoiceschanged = function() { populateVoices(); };
   populateVoices();
 
-  document.getElementById('tts-rate').addEventListener('input', (e) => {
+  document.getElementById('tts-rate').addEventListener('input', function(e) {
     ttsState.rate = parseFloat(e.target.value);
     document.getElementById('tts-rate-label').textContent = ttsState.rate.toFixed(1) + 'x';
   });
 
-  document.getElementById('tts-voice').addEventListener('change', (e) => {
-    const voices = getEnglishVoices();
-    ttsState.voice = voices.find(v => v.name === e.target.value) || null;
+  document.getElementById('tts-voice').addEventListener('change', function(e) {
+    var voices = getEnglishVoices();
+    ttsState.voice = voices.find(function(v) { return v.name === e.target.value; }) || null;
   });
 
-  document.getElementById('btn-tts-play').addEventListener('click', () => {
+  document.getElementById('btn-tts-play').addEventListener('click', function() {
     if (ttsState.paused) resumeTTS();
     else if (ttsState.playing) pauseTTS();
-    else startTTS();
+    else startTTS(0);
   });
 
   document.getElementById('btn-tts-stop').addEventListener('click', stopTTS);
@@ -34,26 +33,26 @@ function initTTS() {
 }
 
 function populateVoices() {
-  const voices = getEnglishVoices();
-  const select = document.getElementById('tts-voice');
-  select.innerHTML = voices.map(v =>
-    `<option value="${v.name}">${v.name} (${v.lang})</option>`
-  ).join('');
+  var voices = getEnglishVoices();
+  var select = document.getElementById('tts-voice');
+  select.innerHTML = voices.map(function(v) {
+    return '<option value="' + v.name + '">' + v.name + ' (' + v.lang + ')</option>';
+  }).join('');
   if (voices.length > 0 && !ttsState.voice) {
-    // Prefer a good English voice
-    const preferred = voices.find(v => v.name.includes('Samantha') || v.name.includes('Daniel') || v.name.includes('Google'));
+    var preferred = voices.find(function(v) {
+      return v.name.indexOf('Samantha') > -1 || v.name.indexOf('Daniel') > -1 || v.name.indexOf('Google') > -1;
+    });
     ttsState.voice = preferred || voices[0];
     select.value = ttsState.voice.name;
   }
 }
 
 function getEnglishVoices() {
-  return speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
+  return speechSynthesis.getVoices().filter(function(v) { return v.lang.indexOf('en') === 0; });
 }
 
 function getEpubBody() {
-  var el = document.getElementById('epub-content');
-  return el || document.body;
+  return document.getElementById('epub-columns') || document.getElementById('epub-content') || document.body;
 }
 
 function extractSentences() {
@@ -73,16 +72,49 @@ function extractSentences() {
   return sentences.filter(function(s) { return s.trim().length > 10; });
 }
 
-function startTTS() {
+function startTTS(startIdx) {
   ttsState.sentences = extractSentences();
   if (ttsState.sentences.length === 0) {
     showToast('没有可朗读的文本');
     return;
   }
-  ttsState.currentSentence = 0;
+  ttsState.currentSentence = startIdx || 0;
   ttsState.playing = true;
   ttsState.paused = false;
   updateTTSButton();
+  speakCurrent();
+}
+
+// Start TTS from a specific paragraph
+function startTTSFromParagraph(paraText, paraEl) {
+  ttsState.sentences = extractSentences();
+  if (ttsState.sentences.length === 0) {
+    showToast('没有可朗读的文本');
+    return;
+  }
+
+  // Find the sentence that best matches the start of the paragraph
+  var paraStart = paraText.substring(0, 40).replace(/[^a-zA-Z0-9]/g, ' ').trim();
+  var bestIdx = 0;
+  for (var i = 0; i < ttsState.sentences.length; i++) {
+    var sStart = ttsState.sentences[i].substring(0, 40).replace(/[^a-zA-Z0-9]/g, ' ').trim();
+    if (sStart.indexOf(paraStart) === 0 || paraStart.indexOf(sStart) === 0) {
+      bestIdx = i;
+      break;
+    }
+    // Partial match
+    var words = paraStart.split(/\s+/).slice(0, 4).join(' ');
+    if (words.length > 10 && sStart.indexOf(words) > -1) {
+      bestIdx = i;
+      break;
+    }
+  }
+
+  ttsState.currentSentence = bestIdx;
+  ttsState.playing = true;
+  ttsState.paused = false;
+  updateTTSButton();
+  showToast('从选中段落开始朗读');
   speakCurrent();
 }
 
@@ -93,22 +125,22 @@ function speakCurrent() {
     return;
   }
 
-  const text = ttsState.sentences[ttsState.currentSentence];
+  var text = ttsState.sentences[ttsState.currentSentence];
   highlightSentence(text);
 
-  const utter = new SpeechSynthesisUtterance(text);
+  var utter = new SpeechSynthesisUtterance(text);
   utter.lang = 'en-US';
   utter.rate = ttsState.rate;
   if (ttsState.voice) utter.voice = ttsState.voice;
 
-  utter.onend = () => {
+  utter.onend = function() {
     ttsState.currentSentence++;
     if (ttsState.playing && !ttsState.paused) {
       speakCurrent();
     }
   };
 
-  utter.onerror = (e) => {
+  utter.onerror = function(e) {
     if (e.error !== 'canceled' && e.error !== 'interrupted') {
       ttsState.currentSentence++;
       if (ttsState.playing && !ttsState.paused) {
@@ -153,8 +185,8 @@ function nextSentence() {
 }
 
 function updateTTSButton() {
-  const btn = document.getElementById('btn-tts-play');
-  const svg = btn.querySelector('svg');
+  var btn = document.getElementById('btn-tts-play');
+  var svg = btn.querySelector('svg');
   if (ttsState.paused) {
     svg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
   } else if (ttsState.playing) {
@@ -180,13 +212,36 @@ function highlightSentence(text) {
       range.setEnd(node, Math.min(idx + text.length, node.textContent.length));
       var span = document.createElement('span');
       span.className = 'tts-highlight';
-      span.style.cssText = 'background:rgba(79,70,229,0.15);border-radius:2px;';
+      span.style.cssText = 'background:rgba(79,70,229,0.2);border-radius:2px;';
       try {
         range.surroundContents(span);
-        span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Navigate to the page containing this highlight
+        navigateToHighlight(span);
       } catch(e) {}
       break;
     }
+  }
+}
+
+function navigateToHighlight(el) {
+  if (typeof pageWidth === 'undefined' || !pageWidth) return;
+  var columns = document.getElementById('epub-columns');
+  if (!columns) return;
+
+  var rect = el.getBoundingClientRect();
+  var colsRect = columns.getBoundingClientRect();
+  // el's position relative to the columns div
+  var elXInCols = rect.left - colsRect.left + columns.offsetLeft;
+
+  // Determine which page/column this element is in
+  var targetPage = Math.floor(elXInCols / pageWidth);
+
+  // Navigate if needed
+  if (typeof currentPage !== 'undefined' && targetPage !== currentPage) {
+    currentPage = targetPage;
+    columns.style.transition = 'transform 0.3s ease';
+    columns.style.transform = 'translateX(-' + (targetPage * pageWidth) + 'px)';
+    updatePageCount();
   }
 }
 
@@ -202,7 +257,7 @@ function clearHighlight() {
 }
 
 function toggleTTSControls() {
-  const ctrl = document.getElementById('tts-controls');
+  var ctrl = document.getElementById('tts-controls');
   ctrl.classList.toggle('hidden');
   if (!ctrl.classList.contains('hidden')) {
     populateVoices();
