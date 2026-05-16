@@ -1,0 +1,22 @@
+{
+  "name": "轻读 - EPUB Reader",
+  "short_name": "轻读",
+  "description": "简约的 EPUB 阅读器，支持英语查词和生词本",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#fafafa",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
