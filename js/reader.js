@@ -49,6 +49,7 @@ function loadAndRender(book) {
         scheduleSave();
       });
 
+
       // Jump to saved page
       if (currentPage > 0 && currentPage < totalPages) {
         scroller.scrollLeft = currentPage * pageWidth;
@@ -154,6 +155,34 @@ openReader = function(bookId) {
   });
 };
 
+// ===== Chapter Navigation =====
+function jumpChapter(forward) {
+  var map = window._epubTocMap || [];
+  if (map.length < 2) return;
+
+  // Find current chapter based on current page
+  var currentChapter = -1;
+  for (var i = map.length - 1; i >= 0; i--) {
+    if (currentPage >= map[i].page) {
+      currentChapter = i;
+      break;
+    }
+  }
+
+  var target = forward ? currentChapter + 1 : currentChapter - 1;
+  if (target < 0 || target >= map.length) return;
+
+  var scroller = document.getElementById('epub-scroller');
+  if (scroller && pageWidth) {
+    currentPage = map[target].page;
+    scroller.scrollTo({ left: currentPage * pageWidth, behavior: 'smooth' });
+    updateProgress();
+    scheduleSave();
+  }
+}
+
+document.getElementById('btn-prev-chapter').addEventListener('click', function() { jumpChapter(false); });
+document.getElementById('btn-next-chapter').addEventListener('click', function() { jumpChapter(true); });
 document.getElementById('btn-font-up').addEventListener('click', function() { changeFontSize(2); });
 document.getElementById('btn-font-down').addEventListener('click', function() { changeFontSize(-2); });
 document.getElementById('btn-tts-toggle').addEventListener('click', toggleTTSControls);
