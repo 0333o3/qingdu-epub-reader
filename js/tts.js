@@ -99,49 +99,36 @@ function startTTSFromParagraph(paraText, paraEl) {
     return;
   }
 
-  // Find paragraph position in full text
+  // Build full text and find paragraph position by indexOf
   var body = getEpubBody();
   var textParts = [];
-  var paraStartIdx = -1;
-  var charCount = 0;
   var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
   var node;
-
   while ((node = walker.nextNode())) {
-    var t = node.textContent;
-    // Check if this node is inside the target paragraph
-    if (paraEl && (paraEl === node.parentElement || node.parentElement.closest('p') === paraEl)) {
-      if (paraStartIdx < 0) {
-        paraStartIdx = charCount + t.indexOf(paraText.substring(0, 20));
-      }
-    }
-    charCount += t.length;
-    if (t.trim()) textParts.push(t);
+    var t = node.textContent.trim();
+    if (t) textParts.push(t);
   }
-
   var fullText = textParts.join(' ');
 
-  // Find which sentence contains the paragraph start
-  if (paraStartIdx < 0 && paraEl) {
-    // Fallback: find paragraph text in full text
-    var cleanPara = paraText.substring(0, 30).replace(/\s+/g, ' ').trim();
-    paraStartIdx = fullText.indexOf(cleanPara);
+  // Find paragraph in full text using first meaningful words
+  var searchText = paraText.replace(/\s+/g, ' ').substring(0, 50).trim();
+  var pos = fullText.indexOf(searchText);
+  if (pos < 0) {
+    // Try shorter match
+    searchText = paraText.replace(/\s+/g, ' ').substring(0, 25).trim();
+    pos = fullText.indexOf(searchText);
+  }
+  if (pos < 0) {
+    // Try even shorter
+    searchText = paraText.replace(/[^a-zA-Z0-9 ]/g, '').substring(0, 20).trim();
+    pos = fullText.indexOf(searchText);
   }
 
-  if (paraStartIdx >= 0) {
+  if (pos >= 0) {
     // Count sentences before this position
-    var sentenceBreaks = [];
-    var re = /[^.!?…\n]+[.!?…]*[\n"」』]?/g;
-    var m;
-    while ((m = re.exec(fullText))) {
-      sentenceBreaks.push(m.index);
-    }
-    for (var i = sentenceBreaks.length - 1; i >= 0; i--) {
-      if (sentenceBreaks[i] <= paraStartIdx) {
-        ttsState.currentSentence = i;
-        break;
-      }
-    }
+    var beforeText = fullText.substring(0, pos);
+    var sentencesBefore = beforeText.match(/[^.!?…\n]+[.!?…]*[\n"」』]?/g) || [];
+    ttsState.currentSentence = sentencesBefore.length;
   } else {
     ttsState.currentSentence = 0;
   }

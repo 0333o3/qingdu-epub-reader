@@ -388,9 +388,14 @@ function setupWordTapOnDiv(el) {
       longPressTimer = setTimeout(function() {
         if (!moved) {
           var el2 = document.elementFromPoint(sx, sy);
-          var p = el2 ? (el2.closest ? el2.closest('p') : null) : null;
-          if (!p) { p = findClosestP(el2); }
-          if (p && p.textContent.trim().length > 20) {
+          var p = null;
+          // Walk up DOM to find a paragraph or content block
+          var cur = el2;
+          while (cur && cur !== document.body && cur !== el) {
+            if (cur.tagName === 'P') { p = cur; break; }
+            cur = cur.parentElement;
+          }
+          if (p && p.textContent.trim().length > 10) {
             startTTSFromParagraph(p.textContent.trim(), p);
           }
         }
